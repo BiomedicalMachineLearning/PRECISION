@@ -1,0 +1,65 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(ComplexHeatmap)
+```
+
+
+```{r}
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+DefaultAssay(df) <- "RNA"
+Idents(df) <- "sample"
+
+outdir <- "/scripts/0_Sandbox/20221108_PearsonCorrelationSamples/outdir"
+```
+
+# Step 1: Get average expression of the top 2000 variable genes
+
+```{r}
+Idents(df) <- "sample"
+goi <- df@assays$integrated@var.features
+
+ave <- AverageExpression(df, assays = "RNA", features = goi, slot = "data", group.by = "sample")
+```
+
+# what if we do the same but scale the results first
+
+```{r}
+df <- ScaleData(df, features = goi)
+avescale <- AverageExpression(df, assays = "RNA", features = goi, slot = "scale.data", group.by = "sample")
+```
+
+# Calculate Pearson correlation between samples
+
+```{r}
+corres <- cor(ave$RNA, method = "pearson")
+corresscale <- cor(avescale$RNA, method = "pearson")
+```
+
+```{r}
+CellPalette = circlize::colorRamp2(c(-1, 0, 1), c("blue", "white", "red"))
+
+ht_norm <- Heatmap(corres,
+        col = CellPalette,
+        width = unit(7, "cm"),
+        height = unit(7, "cm"))
+
+ht_scale <- Heatmap(corresscale,
+        col = CellPalette,
+        width = unit(7, "cm"),
+        height = unit(7, "cm"))
+
+pdf(paste0(outdir, "ComplexHeatmap_VarGenes.pdf"), height = 9, width = 9)
+draw(ht_norm, annotation_legend_side = "bottom", heatmap_legend_side = "bottom")
+dev.off()
+
+pdf(paste0(outdir, "ComplexHeatmap_VarGenesScale.pdf"), height = 9, width = 9)
+draw(ht_scale, annotation_legend_side = "bottom", heatmap_legend_side = "bottom")
+dev.off()
+```
+
