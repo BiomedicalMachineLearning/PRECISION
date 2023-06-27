@@ -1,0 +1,38 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Clusterwise/outdir/"
+sampleID <- "4.4v4.5"
+comp_4.4 <- read.delim("/scripts/13b_ProcessForGO/Clusterwise/outdir/4.4_vehVSivig_blood_Markers.txt")
+comp_4.5 <- read.delim("/scripts/13b_ProcessForGO/Clusterwise/outdir/4.5_vehVSivig_cord_Markers.txt")
+```
+
+```{r}
+ProcessOverlaps <- function(mycluster) {
+  comp_4.4_filt <- comp_4.4 %>% filter(cluster == mycluster)
+  comp_4.5_filt <- comp_4.5 %>% filter(cluster == mycluster)
+  overlap <- intersect(comp_4.4_filt$gene, comp_4.5_filt$gene)
+  overlap_table <- data.frame(gene = overlap, cluster = rep(mycluster, length(overlap)))
+  return(overlap_table)
+}
+```
+
+```{r}
+all_clusters <- unique(c(comp_4.4$cluster, comp_4.5$cluster))
+df_all <- lapply(all_clusters, ProcessOverlaps) %>% bind_rows()
+write.table(df_all, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# remove Rb/Mt
+
+```{r}
+df_all_filt <- df_all[grep("^MT-|^RPS|^RPL", df_all$gene, invert = TRUE),]
+write.table(df_all_filt, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```

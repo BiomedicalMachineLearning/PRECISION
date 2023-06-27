@@ -1,0 +1,42 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Samplewise/4.6/outdir/"
+comp_ivigVScntl <- read.delim("/scripts/13_DEG/AllCellsTogether/4.6_blood_NvOrSham_vs_SCI+IVIG/outdir/markers_ivigVSshnv_RemoveRbMt_top10.txt")
+comp_vehVScntl <- read.delim("/scripts/13_DEG/AllCellsTogether/4.6_blood_NvOrSham_vs_SCI+IVIG/outdir/markers_vehVSshnv_RemoveRbMt_top10.txt")
+sampleID <- "EitherSCIvsBothCntl"
+```
+
+# remove overlaps
+
+```{r}
+comp_ivigVScntl$analysis <- "ivigVScntl"
+comp_ivigVScntl <- mutate(comp_ivigVScntl, analysis2 = paste0(analysis, "_", direction))
+
+comp_vehVScntl$analysis <- "vehVScntl"
+comp_vehVScntl <- mutate(comp_vehVScntl, analysis2 = paste0(analysis, "_", direction))
+```
+
+# merge
+
+```{r}
+mergetable <- rbind(comp_ivigVScntl, comp_vehVScntl)
+mergetable <- mergetable[,c("gene", "direction", "analysis2")]
+# remove genes that are on the up or down list twice
+dups <- mergetable %>% group_by(direction) %>% filter(duplicated(gene)) %>% pull(gene)
+# remove ALL the rows that are in dups
+mergetable <- mergetable[!(mergetable$gene %in% dups),]
+# reorder columns
+mergetable <- mergetable[,c("gene", "analysis2")]
+colnames(mergetable) <- c("gene", "cluster")
+
+# save
+write.table(mergetable, file = paste0(outdir, sampleID, "_MarkersForGO.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```

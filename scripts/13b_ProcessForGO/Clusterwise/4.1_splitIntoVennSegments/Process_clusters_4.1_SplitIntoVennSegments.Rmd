@@ -1,0 +1,54 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# just edit for each file and run
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Clusterwise/4.1_splitIntoVennSegments/outdir/"
+
+sampleID <- "4.1_SCIvsshamnaive_blood"
+
+genelist <- read.delim("/scripts/13b_ProcessForGO/Clusterwise/outdir/4.1_SCIvsshamnaive_blood_Markers_KeepSeparate_dropRbMt.txt")
+```
+
+# combine direction and clusterID
+
+```{r}
+genelist <- mutate(genelist, clustdir = paste0(clusterID, "_", direction))
+```
+
+# function to process
+
+```{r}
+GetVennSegments <- function(myclustdir) {
+  # filter genelist to the clustdir of interest
+  DEtable <- genelist %>% filter(clustdir == myclustdir)
+  # list the analysis/analyses that each gene is found in
+  GeneHitList <- split(DEtable$analysisID, DEtable$gene)
+  # sort the analysis names alphabetically, concatenate and convert to table format
+  GeneHitTable <- as.data.frame(sapply(GeneHitList, function(x) paste(sort(x), collapse="_")))
+  # modify the table columns
+  colnames(GeneHitTable) <- "groups"
+  GeneHitTable$genes <- rownames(GeneHitTable)
+  # save
+  write.table(GeneHitTable, file = paste0(outdir, myclustdir, "_VennSegments.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  # convert table to a count of hits per segment
+  counts <- as.data.frame(table(GeneHitTable$groups))
+  colnames(counts) <- c("categories", "Freq")
+  write.table(counts, file = paste0(outdir, myclustdir, "_VennSegmentCounts.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  # make a list of each possible Venn segment and the genes in it (absent segments will be missing)
+  GeneHitList_new <- split(GeneHitTable$genes, GeneHitTable$groups)
+  return(GeneHitList_new)
+}
+```
+
+```{r}
+segments <- lapply(unique(genelist$clustdir), GetVennSegments)
+```
+

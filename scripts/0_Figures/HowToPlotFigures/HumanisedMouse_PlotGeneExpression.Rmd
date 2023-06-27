@@ -1,0 +1,204 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+How to plot gene expression (or other continuous variables) in the humanised mouse data
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+```
+
+```{r}
+# Data input
+
+## The paths here are to Laura's computer but I just directly synced them to the RDM, so if you can find e.g. the Thomas2022 folder on the RDM you can just change the start of the path to point to that
+
+## This is the path to the Seurat object of interest (see the TLDR summary in my Google Docs page)
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+# There are two "assay" slots in this Seurat object, "RNA" and "integrated". Data integration only uses the top 2000 most variable genes (for computational efficiency). For plotting gene expression we need to be in the "RNA" assay, because all the genes are present here
+DefaultAssay(df) <- "RNA"
+
+## This is where you want to save the output
+outdir <- "/scripts/0_Figures/HowToPlotFigures/outdir/"
+
+## list of genes of interest
+goi <- c("COL1A1", "ITGAM", "CXCL3")
+```
+
+# Optional: Check that all your genes of interest exist in the dataset
+
+If a gene doesn't come up, it either means it wasn't captured in your dataset, the gene name is wrong (e.g. if the protein name is different to the gene name). In the latter case, you can search for your gene here and check the synonyms: https://www.informatics.jax.org/
+
+```{r}
+# check if any of the genes aren't present in your dataset
+missing <- goi[!(goi %in% rownames(df@assays$RNA@data))]
+print(paste0("the following genes are missing: ", missing))
+
+# remove genes that are missing
+goi <- goi[goi %in% rownames(df@assays$RNA@data)]
+```
+
+# Option 1: The simplest plot
+
+```{r}
+FeaturePlot(df, features = "S100A8", order = TRUE)
+ggsave(filename = paste0(outdir, "simple_S100A8.pdf"), width = 5, height = 5)
+```
+
+# Option 2: Plot multiple genes at once, with a custom colour, each gene on its own scale
+
+Plotting notes:
+* To change the colour palette, replace "YlOrRd" with one of the colour codes from this chart: https://www.datanovia.com/en/wp-content/uploads/dn-tutorials/ggplot2/figures/0101-rcolorbrewer-palette-rcolorbrewer-palettes-1.png
+* To use the default Seurat colours (grey to blue), remove the scale_color_gradientn line altogether
+* Alternatively, alternatively, if you want 0 to be grey and then have a colour gradient you can run:
+            #scale_color_gradientn(colors = c("grey", brewer.pal(9, "YlOrRd")))
+* You can delete the first and last line of this code, and change mygene to (for example) "COL1A1" (in quotes) to just run this once for a single gene
+
+```{r}
+for (mygene in goi) {
+FeaturePlot(df, features = mygene, order = TRUE) +
+  scale_color_gradientn(colors = brewer.pal(9, "YlOrRd")) +
+  coord_fixed()
+ggsave(filename = paste0(outdir, "genePlot_", mygene, ".pdf"), width = 5, height = 5)
+}
+```
+
+# Option 3: Plot multiple genes but make all genes are on the same scale as one another
+
+```{r}
+maxval <- max(df@assays$RNA@data[goi,])
+
+for (mygene in goi) {
+FeaturePlot(df, features = mygene, order = TRUE) +
+  scale_color_gradientn(colors = brewer.pal(9, "YlOrRd"), limits = c(0, maxval)) +
+  coord_fixed()
+ggsave(filename = paste0(outdir, "samescale_genePlot_", mygene, ".pdf"), width = 5, height = 5)
+}
+```
+
+# Option 4a: Plot one gene, and split out the samples by some condition (quick-and-dirty)
+
+Plotting notes: 
+* This is fine for getting a quick idea of a sample, but isn't great for figures
+    * It doesn't print a legend
+    * I can't remember if all the plots are on the same scale
+* NOTE: To see all the metadata column options, type `head(df[[]])`
+
+```{r}
+# The quick-and-dirty way (fine for checking, not great for figures)
+FeaturePlot(df, features = "CD4", order = TRUE, split.by = "sample")
+# to save nicely, you probably want to set width to be height * nConditions (NB this is in inches)
+ggsave(filename = paste0(outdir, "simple_CD4_splitSample.pdf"), width = 24, height = 4)
+```
+
+# Option 4a: Plot one gene, and split out the samples by some condition (better for figures)
+
+Plotting notes:
+* Samples
+    * In the above, we used `split.by = "sample"`, here we'll use the equivalent of `split.by = "file"`. Regardless of the column you choose, you'll need to know what all the variables in this column are: you can check this with `unique(df$file)`
+    * Here we will save one plot for each condition
+* Modifying the plot
+    * You can integrate all the other figure elements from above (e.g. the colours)
+    * We're also going to make some other changes:
+          * Remove the legend from all but the last sample
+          * Remove the X and Y axis text and ticks
+          * Remove the X and Y labels
+          * Add a custom title
+
+```{r fig.height=10, fig.width=10}
+# calculate the maximum scale value
+maxval <- max(df@assays$RNA@data["CD4",])
+
+# split up the cells by your condition of interest
+cells_B1 <- names(which(df$file == "B1"))
+cells_B2 <- names(which(df$file == "B2"))
+cells_B3 <- names(which(df$file == "B3"))
+cells_B4 <- names(which(df$file == "B4"))
+cells_C2 <- names(which(df$file == "C2"))
+cells_C3 <- names(which(df$file == "C3"))
+
+# Plot one plot for each sample of interest, and save separately
+FeaturePlot(df, features = "CD4", order = TRUE, cells = cells_B1, pt.size = 0.5) +
+  scale_color_gradientn(colors = brewer.pal(9, "YlOrRd"), limits = c(0, maxval)) +
+  # Remove the legend
+  NoLegend() +
+  coord_fixed() +
+  # Add a custom title
+  ggtitle(paste0("CD4 - B1")) +
+  # Remove the X and Y text, ticks and labels
+  theme(axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_B1sham.pdf"), width = 4, height = 4)
+
+FeaturePlot(df, features = "CD4", order = TRUE, cells = cells_B2, pt.size = 0.5) +
+  scale_color_gradientn(colors = brewer.pal(9, "YlOrRd"), limits = c(0, maxval)) +
+  # Remove the legend
+  NoLegend() +
+  coord_fixed() +
+  # Add a custom title
+  ggtitle(paste0("CD4 - B1")) +
+  # Remove the X and Y text, ticks and labels
+  theme(axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_B2veh.pdf"), width = 4, height = 4)
+
+FeaturePlot(df, features = "CD4", order = TRUE, cells = cells_B3, pt.size = 0.5) +
+  scale_color_gradientn(colors = brewer.pal(9, "YlOrRd"), limits = c(0, maxval)) +
+  # Remove the legend
+  NoLegend() +
+  coord_fixed() +
+  # Add a custom title
+  ggtitle(paste0("CD4 - B1")) +
+  # Remove the X and Y text, ticks and labels
+  theme(axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_B3ivig.pdf"), width = 4, height = 4)
+
+FeaturePlot(df, features = "CD4", order = TRUE, cells = cells_B4, pt.size = 0.5) +
+  scale_color_gradientn(colors = brewer.pal(9, "YlOrRd"), limits = c(0, maxval)) +
+  # Remove the legend
+  NoLegend() +
+  coord_fixed() +
+  # Add a custom title
+  ggtitle(paste0("CD4 - B1")) +
+  # Remove the X and Y text, ticks and labels
+  theme(axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_B4naive.pdf"), width = 4, height = 4)
+
+FeaturePlot(df, features = "CD4", order = TRUE, cells = cells_C2, pt.size = 0.5) +
+  scale_color_gradientn(colors = brewer.pal(9, "YlOrRd"), limits = c(0, maxval)) +
+  # Remove the legend
+  NoLegend() +
+  # Add a custom title
+  coord_fixed() +
+  ggtitle(paste0("CD4 - B1")) +
+  # Remove the X and Y text, ticks and labels
+  theme(axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_C2veh.pdf"), width = 4, height = 4)
+
+FeaturePlot(df, features = "CD4", order = TRUE, cells = cells_C3, pt.size = 0.5) +
+  scale_color_gradientn(colors = brewer.pal(9, "YlOrRd"), limits = c(0, maxval)) +
+  # Remove the legend
+  #NoLegend() +
+  # Add a custom title
+  coord_fixed() +
+  ggtitle(paste0("CD4 - B1")) +
+  # Remove the X and Y text, ticks and labels
+  theme(axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+# make the one with the legend a little wider
+ggsave(filename = paste0(outdir, "clusters_dimplot_C3ivig.pdf"), width = 5, height = 4)
+```
+

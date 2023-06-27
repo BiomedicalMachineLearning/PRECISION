@@ -1,0 +1,96 @@
+---
+title: "DE all times together"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(VennDiagram)
+```
+
+```{r}
+outdir <- "/scripts/13_DEG/EachCelltypeSeparately/4.4_vehVSivig_blood/outdir/"
+```
+
+```{r}
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+DefaultAssay(df) <- "RNA"
+Idents(df) <- "sample"
+# Comparison: SCI blood vs sham blood (veh)
+my_ident1 <- "blood_SCI_ivig" 
+my_ident2 <- "blood_SCI_veh"
+```
+
+```{r}
+# subset the data into separate clusters
+cl0_cells <- colnames(df)[df$integrated_snn_res.0.4 == 0]
+cl1_cells <- colnames(df)[df$integrated_snn_res.0.4 == 1]
+cl2_cells <- colnames(df)[df$integrated_snn_res.0.4 == 2]
+cl3_cells <- colnames(df)[df$integrated_snn_res.0.4 == 3]
+cl4_cells <- colnames(df)[df$integrated_snn_res.0.4 == 4]
+cl5_cells <- colnames(df)[df$integrated_snn_res.0.4 == 5]
+cl6_cells <- colnames(df)[df$integrated_snn_res.0.4 == 6]
+cl7_cells <- colnames(df)[df$integrated_snn_res.0.4 == 7]
+cl8_cells <- colnames(df)[df$integrated_snn_res.0.4 == 8]
+cl9_cells <- colnames(df)[df$integrated_snn_res.0.4 == 9]
+cl10_cells <- colnames(df)[df$integrated_snn_res.0.4 == 10]
+
+cl0 <- subset(df, cells = cl0_cells)
+cl1 <- subset(df, cells = cl1_cells)
+cl2 <- subset(df, cells = cl2_cells)
+cl3 <- subset(df, cells = cl3_cells)
+cl4 <- subset(df, cells = cl4_cells)
+cl5 <- subset(df, cells = cl5_cells)
+cl6 <- subset(df, cells = cl6_cells)
+cl7 <- subset(df, cells = cl7_cells)
+cl8 <- subset(df, cells = cl8_cells)
+cl9 <- subset(df, cells = cl9_cells)
+cl10 <- subset(df, cells = cl10_cells)
+```
+
+# Compare:
+* SCI-blood vs sham-blood
+* SCI-blood vs naive-blood
+* sham-blood vs naive-blood
+(within celltypes)
+
+[NB for cord vs blood the only celltypes we can compare is clusters 0, 1, 6, 10, 11]
+
+```{r}
+RunTests <- function(mydf, sampleID) {
+markers <- FindMarkers(mydf, min.pct = 0.25, logfc.threshold = 0.25, ident.1 = my_ident1, ident.2 = my_ident2)
+markers <- markers %>% filter(p_val_adj <= 0.05)
+markers <- mutate(markers, direction = ifelse(avg_log2FC > 0, "up", "down"))
+markers$gene <- rownames(markers)
+write.table(markers, file = paste0(outdir, sampleID, "_markers.txt"), sep = "\t", quote = FALSE, col.names = NA)
+markers_top10 <- markers %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_top10, file = paste0(outdir, sampleID, "_markers_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+# remove Rb genes
+markers_filt <- markers[grep("^MT-|^RPS|^RPL", markers$gene, invert = TRUE),]
+write.table(markers_filt, file = paste0(outdir, sampleID, "_markers_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_top10_filt <- markers_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_top10_filt, file = paste0(outdir, sampleID, "_markers_top10_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_top100_filt <- markers_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_top100_filt, file = paste0(outdir, sampleID, "_markers_top100_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+}
+```
+
+```{r}
+RunTests(cl0, "cl0")
+RunTests(cl1, "cl1")
+RunTests(cl2, "cl2")
+RunTests(cl3, "cl3")
+RunTests(cl4, "cl4")
+RunTests(cl5, "cl5")
+RunTests(cl6, "cl6")
+RunTests(cl7, "cl7")
+RunTests(cl8, "cl8")
+RunTests(cl9, "cl9")
+RunTests(cl10, "cl10")
+```
+

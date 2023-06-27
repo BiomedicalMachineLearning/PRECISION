@@ -1,0 +1,95 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+inhouse <- readRDS("/scripts/17_MetacellVehicleOnly/vehicle/11.1a_ReplotUMAP/out_obj/ReplotUMAP_Seurat.RDS")
+Idents(inhouse) <- "clusters_wholedataset"
+DefaultAssay(inhouse) <- "RNA"
+outdir <- "/scripts/16_CompareKyritsis/3_DEGscore/2_MakeModuleScores/outdir/"
+```
+
+# GOIs
+
+```{r}
+# all the kyritsis genes
+allDEGs <- read.csv("/scripts/16_CompareKyritsis/Paper/FromEmail/differential_gene_expression_all_contrasts.csv")
+TC_HC <- allDEGs %>% filter(TC.HC.adj.P.Val <= 0.05) %>% filter(logFC > 1 | logFC < -1)
+SCI_HC <- allDEGs %>% filter(SCI.HC.adj.P.Val <= 0.05) %>% filter(logFC.1 > 1 | logFC.1 < -1)
+SCI_TC <- allDEGs %>% filter(SCI.TC.adj.P.Val <= 0.05) %>% filter(logFC.2 > 1 | logFC.2 < -1)
+
+# DEGs from our analysis (4.1, blood SCI vs sham/naive) - samplewise
+SCIvnaive <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvnaive_RemoveRbMt.txt")
+SCIvsSham <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvsham_RemoveRbMt.txt")
+shamvnaive <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_shamVnaive_RemoveRbMt.txt")
+```
+
+# split GOIs into up vs down
+
+```{r}
+# kyritsis genes
+TC_HC_up <- TC_HC[TC_HC$logFC > 0,]
+TC_HC_down <- TC_HC[TC_HC$logFC < 0,]
+
+SCI_HC_up <- SCI_HC[SCI_HC$logFC > 0,]
+SCI_HC_down <- SCI_HC[SCI_HC$logFC < 0,]
+
+SCI_TC_up <- SCI_TC[SCI_TC$logFC > 0,]
+SCI_TC_down <- SCI_TC[SCI_TC$logFC < 0,]
+
+# inhouse genes
+SCIvnaive_up <- SCIvnaive[SCIvnaive$direction == "up",]
+SCIvnaive_down <- SCIvnaive[SCIvnaive$direction == "down",]
+
+SCIvsSham_up <- SCIvsSham[SCIvsSham$direction == "up",]
+SCIvsSham_down <- SCIvsSham[SCIvsSham$direction == "down",]
+
+shamvnaive_up <- shamvnaive[shamvnaive$direction == "up",]
+shamvnaive_down <- shamvnaive[shamvnaive$direction == "down",]
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+goi_up_2096 <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_upreg.txt")
+goi_down_2096 <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_downreg.txt")
+
+# genes that are shared by the SCI.TC and SCI.HC comparisons
+goi_up_key <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_upreg_KeyOverlap.txt")
+goi_down_key <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_downreg_KeyOverlap.txt")
+
+# top 50 up and down genes from (1) the 2096 list and (2) the key gene list
+goi_up_top50_2096 <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_top50.txt") %>% filter(direction == "up")
+goi_down_top50_2096 <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_top50.txt") %>% filter(direction == "down")
+
+goi_up_top50_keygenes <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_keygenes_top50.txt") %>% filter(direction == "up")
+goi_down_top50_keygenes <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_keygenes_top50.txt") %>% filter(direction == "down")
+```
+
+
+# Test 1: Simple overlaps
+

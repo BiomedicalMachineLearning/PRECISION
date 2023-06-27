@@ -1,0 +1,59 @@
+---
+title: "DE all times together"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13_DEG/AllCellsTogether/4.3_bloodVScord_ivig/outdir/"
+```
+
+```{r}
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+DefaultAssay(df) <- "RNA"
+Idents(df) <- "sample"
+# Comparison: SCI blood vs sham blood (veh)
+my_ident1 <- "cord_SCI_ivig" 
+my_ident2 <- "blood_SCI_ivig"
+```
+
+# Compare:
+* SCI-blood vs sham-blood
+* SCI-blood vs naive-blood
+* sham-blood vs naive-blood
+(regardless of celltype)
+
+
+```{r}
+# ivig-blood vs veh-blood
+markers <- FindMarkers(df, min.pct = 0.25, logfc.threshold = 0.25, ident.1 = my_ident1, ident.2 = my_ident2)
+markers <- markers %>% filter(p_val_adj <= 0.05)
+markers <- mutate(markers, direction = ifelse(avg_log2FC > 0, "up", "down"))
+markers$gene <- rownames(markers)
+write.table(markers, file = paste0(outdir, "markers.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_top10 <- markers %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_top10, file = paste0(outdir, "markers_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_top100 <- markers %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_top100, file = paste0(outdir, "markers_top100.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+```{r}
+# Remove ribosomal and mitochondrial genes
+NbrRbMt <- length(grep("^MT-|^RPS|^RPL", markers$gene))
+markers_filt <- markers[grep("^MT-|^RPS|^RPL", markers$gene, invert = TRUE),]
+write.table(markers_filt, file = paste0(outdir, "markers_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_top10_filt <- markers_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_top10_filt, file = paste0(outdir, "markers_top10_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_top100_filt <- markers_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_top100_filt, file = paste0(outdir, "markers_top100_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+

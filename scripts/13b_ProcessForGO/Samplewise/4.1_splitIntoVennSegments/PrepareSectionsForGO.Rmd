@@ -1,0 +1,55 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# just edit for each file and run
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Samplewise/4.1_splitIntoVennSegments/outdir_GOprep/"
+
+sampleID <- "4.1_SCIvsshamnaive_blood"
+
+uplist <- read.delim("/scripts/13b_ProcessForGO/Samplewise/4.1_splitIntoVennSegments/outdir/df_noRb_up_VennSegments.txt")
+
+downlist <- read.delim("/scripts/13b_ProcessForGO/Samplewise/4.1_splitIntoVennSegments/outdir/df_noRb_down_VennSegments.txt")
+```
+
+# merge up and down lists
+
+```{r}
+uplist$dir <- "up"
+downlist$dir <- "down"
+mergedlist <- rbind(uplist, downlist)
+mergedlist <- mutate(mergedlist, group_dir = paste0(groups, "_", dir))
+```
+
+# extract genes and clusters
+
+```{r}
+GOdata <- mergedlist[,c("genes", "group_dir")]
+colnames(GOdata) <- c("gene", "cluster")
+write.table(GOdata, file = paste0(outdir, "allsegments.txt"), sep = "\t")
+```
+
+# ellen wants SCIvSham only, SCIvNaive only, and SCIvSham + SCI v naive only
+
+Prep as 3 separate lists, and as one list with all 3
+
+```{r}
+GOdata_SCIvsham <- GOdata %>% filter(cluster == "SCIvsham_down" | cluster == "SCIvsham_up")
+write.table(GOdata_SCIvsham, file = paste0(outdir, "SCIvsSham_segment.txt"), sep = "\t")
+
+GOdata_SCIvnaive <- GOdata %>% filter(cluster == "SCIvnaive_down" | cluster == "SCIvnaive_up")
+write.table(GOdata_SCIvnaive, file = paste0(outdir, "SCIvsNaive_segment.txt"), sep = "\t")
+
+GOdata_SCIvsham_SCIvnaive <- GOdata %>% filter(cluster == "SCIvnaive_SCIvsham_down" | cluster == "SCIvnaive_SCIvsham_up")
+write.table(GOdata_SCIvsham_SCIvnaive, file = paste0(outdir, "SCIvsSham_SCIvsNaive_overlap.txt"), sep = "\t")
+
+GOdata_interest <- rbind(GOdata_SCIvsham, GOdata_SCIvnaive, GOdata_SCIvsham_SCIvnaive)
+write.table(GOdata_interest, file = paste0(outdir, "3segmentsOfInterest.txt"), sep = "\t")
+```

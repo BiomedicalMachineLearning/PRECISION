@@ -1,0 +1,134 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r message=FALSE, warning=FALSE}
+# load packages
+library(presto)
+library(clusterProfiler)
+library(ComplexHeatmap)
+library(dplyr)
+library(org.Hs.eg.db)
+#library(org.Hs.eg.db)
+library(tidyverse)
+library(ggpubr)
+library(stringr)
+library(aplot)
+library(patchwork)
+```
+
+
+```{r}
+outdir <- "/scripts/0_Figures/Fig_ReplotGORedBlue/Samplewise/Additional4.1Analyses/Recolour_SCIvNaiveExclusive/outdir/"
+
+sampleID <- "4.1_SCIvNaiveExclusive"
+
+ck_filt_simple <- readRDS("/scripts/14_GO/Samplewise_AllGenes_RemoveRbMt/outdir_4.1_AdditionalVennOverlaps/outdir_SCIvNaiveExclusive/SCIvNaiveExclusive_top100GO_FiltSimp.RDS")
+```
+
+```{r}
+ck_filt_simple@compareClusterResult$sample <- sampleID
+```
+
+```{r}
+MakeDotplots <- function(n, width, height) {
+  # where n = number of genes to pick
+  analysisID <- paste0("top", n)
+  GOdata <- ck_filt_simple@compareClusterResult
+  
+  # get the top N of each group
+  GOdata <- mutate(GOdata, ID_desc = paste0(ID, ": ", Description))
+  
+  topN <- GOdata %>%
+    group_by(Cluster) %>%
+    arrange(p.adjust) %>%
+    dplyr::slice(1:n)
+  topNuniq <- unique(topN$Description)
+  topN_allhits <- GOdata[which(GOdata$Description %in% topNuniq),]
+  
+  # prepare the data table
+  table <- topN_allhits[,c(1,2,3,4,5,7,11, 12)]
+  
+  # add in the various ratios to control dot size
+  table <- tidyr::separate(data = table, col = GeneRatio, into = c("k_GOIinSet", "n_GOI"), sep = "\\/")
+  table <- tidyr::separate(data = table, col = BgRatio, into = c("M_Set", "N_background"), sep = "\\/")
+  ## make numeric
+  table$k_GOIinSet <- as.numeric(table$k_GOIinSet)
+  table$n_GOI <- as.numeric(table$n_GOI)
+  table$M_Set <- as.numeric(table$M_Set)
+  table$N_background <- as.numeric(table$N_background)  
+  ## make a ratio
+  table <- mutate(table, GeneRatio = k_GOIinSet / n_GOI)
+  table <- mutate(table, Ratio_kM = k_GOIinSet / M_Set)
+  
+  # for the sake of visualisation, convert p-values to log10 and invert the numbers of the downregulated hits
+  #table <- mutate(table, direction = gsub(".*_","",Cluster))
+  table$direction <- table$Cluster
+  table <- mutate(table, direction2 = ifelse(direction == "up", 1, -1))
+  table <- mutate(table, padjdir = -log10(p.adjust + 1e-6) * sign(direction2))
+
+  # # simplify the "traj_0_" cluster names to just the number to aid with the ordering/legend
+  # table <- mutate(table, Path = word(Cluster, 1, sep = "_"))
+  # table$Path <- as.factor(table$Path) # convert to factor data type
+  # table$Path <- factor(table$Path, levels = c("d1p2", "d1p3", "d1p11", "d3p3", "d7p0"))
+  # table <- table[order(table$Path),] #reorder
+ 
+   # work out which genes to plot and order them by path ID
+  markers <- table$Description %>% unique()
+  table$Description <- factor(table$Description, levels = rev(topNuniq))
+  
+  # add in the GO term to the name, optionally
+  markers_IDdesc <- table$ID_desc %>% unique()
+  topNuniq_IDdesc <- unique(topN$ID_desc)
+  table$ID_desc <- factor(table$ID_desc, levels = rev(topNuniq_IDdesc))
+  
+  # add time category for  faceting
+  #table$time <- gsub("p.*_.*", "", table$Cluster)
+  
+  ## size is gene ratio, colour is up/downreg - this is the best one
+  # set colour scale - make it symmetrical, whatever value is (abs) larger
+  scaleend <- max(abs(max(table$padjdir)), abs(min(table$padjdir)))
+  
+  dotplot_grp_topN <- table %>% filter(Description %in% markers) %>% 
+    ggplot(aes(x=sample, y = Description, color = padjdir, size = GeneRatio)) + 
+    geom_point() +
+    scale_size_continuous(range = c(0.5, 4)) +
+    scale_color_gradientn(colours = c("blue", "lightskyblue", "white", "orange", "red"),
+                          limits = c(-scaleend, scaleend)) +
+                          # values = scales::rescale(c(min(table$padjdir),
+                          #                            ((abs(min(table$padjdir)))/2)*-1, 0, max(table$padjdir)/2, max(table$padjdir)))) +
+                            scale_y_discrete(position = "right", labels = function(x) str_trunc(x, width = 80, side = "center")) +
+                            theme_light(base_size = 10)
+  
+  pdf(paste0(outdir, sampleID, "_uniqueHits_dotplot_generatio+pval_", analysisID, ".pdf"), width = width, height = height)
+  #labels + dotplot_grp + plot_layout(ncol = 1, heights = c(0.9, 20))
+  print(dotplot_grp_topN)
+  dev.off()
+  
+  ## the same plot, but show the GO term names
+  dotplot_grp_topN_withGOlabels <- table %>% filter(Description %in% markers) %>% 
+    ggplot(aes(x=sample, y = ID_desc, color = padjdir, size = GeneRatio)) + 
+    geom_point() +
+    scale_size_continuous(range = c(0.5, 4)) +
+    scale_color_gradientn(colours = c("blue", "lightskyblue", "white", "orange", "red"),
+                          limits = c(-scaleend, scaleend)) +
+                          # values = scales::rescale(c(min(table$padjdir),
+                          #                            ((abs(min(table$padjdir)))/2)*-1, 0, max(table$padjdir)/2, max(table$padjdir)))) +
+                            
+    scale_y_discrete(position = "right", labels = function(x) str_trunc(x, width = 80, side = "center")) +
+    theme_light(base_size = 10)
+  
+  pdf(paste0(outdir, sampleID, "_uniqueHits_dotplot_generatio+pval_", analysisID, "_withGOlabels.pdf"), width = width, height = height)
+  #labels + dotplot_grp + plot_layout(ncol = 1, heights = c(0.9, 20))
+  print(dotplot_grp_topN_withGOlabels)
+  dev.off()
+}
+```
+
+```{r}
+MakeDotplots(3, 6, 1.5)
+MakeDotplots(10, 6, 2.5 )
+MakeDotplots(20, 6, 4)
+```
+

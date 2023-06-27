@@ -1,0 +1,98 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+```
+
+```{r}
+out_data <- "/scripts/10_integration/out_data/"
+out_obj <- "/scripts/10_integration/out_obj/"
+```
+
+```{r}
+B1 <- readRDS("/scripts/9_Clustering/out_obj/B1_filteredclustered_Seurat.RDS")
+B2 <- readRDS("/scripts/9_Clustering/out_obj/B2_filteredclustered_Seurat.RDS")
+B3 <- readRDS("/scripts/9_Clustering/out_obj/B3_filteredclustered_Seurat.RDS")
+B4 <- readRDS("/scripts/9_Clustering/out_obj/B4_filteredclustered_Seurat.RDS")
+
+C2 <- readRDS("/scripts/9_Clustering/out_obj/C2_filteredclustered_Seurat.RDS")
+C3 <- readRDS("/scripts/9_Clustering/out_obj/C3_filteredclustered_Seurat.RDS")
+```
+
+
+```{r}
+B1$file <- "B1"
+B2$file <- "B2"
+B3$file <- "B3"
+B4$file <- "B4"
+C2$file <- "C2"
+C3$file <- "C3"
+
+B1$sample <- "blood_sham_veh"
+B2$sample <- "blood_SCI_veh"
+B3$sample <- "blood_SCI_ivig"
+B4$sample <- "blood_naive_veh"
+C2$sample <- "cord_SCI_veh"
+C3$sample <- "cord_SCI_ivig"
+
+B1$injury <- "sham"
+B2$injury <- "SCI"
+B3$injury <- "SCI"
+B4$injury <- "naive"
+C2$injury <- "SCI"
+C3$injury <- "SCI"
+
+B1$tissue <- "blood"
+B2$tissue <- "blood"
+B3$tissue <- "blood"
+B4$tissue <- "blood"
+C2$tissue <- "cord"
+C3$tissue <- "cord"
+
+B1$drug <- "veh"
+B2$drug <- "veh"
+B3$drug <- "ivig"
+B4$drug <- "veh"
+C2$drug <- "veh"
+C3$drug <- "ivig"
+
+B1$injurydrug <- "sham_veh"
+B2$injurydrug <- "SCI_veh"
+B3$injurydrug <- "SCI_ivig"
+B4$injurydrug <- "naive_veh"
+C2$injurydrug <- "SCI_veh"
+C3$injurydrug <- "SCI_ivig"
+
+# merge the 2 datasets
+# NOTE that the order matters, it determines the -X suffic added to the cell barcodes
+all <- merge(x = B1, y = c(B2, B3, B4, C2, C3))
+
+# make a list of objects
+all.list <- SplitObject(all, split.by = "sample")
+
+# ------------------------------------------------------------------
+# PERFORM INTEGRATION
+# ------------------------------------------------------------------
+
+all.anchors <- FindIntegrationAnchors(object.list = all.list, dims = 1:20, anchor.features = 2000)
+all.combined <- IntegrateData(anchorset = all.anchors, dims = 1:20)
+
+# ------------------------------------------------------------------
+# SAVE OUTPUT
+# ------------------------------------------------------------------
+
+saveRDS(all.combined, file = paste0(out_obj, "all_integrated.RDS"))
+
+# ------------------------------------------------------------------
+# SESSION INFO
+# ------------------------------------------------------------------
+
+sink(paste0(out_obj, sampleID, "_sessionInfo.txt"))
+sessionInfo()
+sink()
+
+```
+

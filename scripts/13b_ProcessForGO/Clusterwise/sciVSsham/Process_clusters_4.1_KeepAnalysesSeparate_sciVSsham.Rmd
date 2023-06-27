@@ -1,0 +1,30 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# just edit for each file and run
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Clusterwise/sciVSsham/outdir/"
+markers <- read.delim("/scripts/13b_ProcessForGO/Clusterwise/outdir/4.1_SCIvsshamnaive_blood_Markers_KeepSeparate_dropRbMt.txt", row.names = 1)
+sampleID <- "4.1_SCIvssham_blood"
+```
+
+```{r}
+# filter to only the SCI vs sham sample
+markers <- markers %>% filter(analysisID == "SCIvsham")
+
+# make a column with clusterID and direction together, will use this to loop
+markers <- mutate(markers, cluster_dir = paste0(clusterID, "_", direction))
+```
+
+```{r}
+markers2 <- markers[,c("gene", "cluster_dir")]
+colnames(markers2) <- c("gene", "cluster")
+write.table(markers2, file = paste0(outdir, "Clusterwise_SCIvsSham.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```

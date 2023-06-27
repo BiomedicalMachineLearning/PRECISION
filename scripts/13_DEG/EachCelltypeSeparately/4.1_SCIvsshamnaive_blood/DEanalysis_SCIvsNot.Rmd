@@ -1,0 +1,131 @@
+---
+title: "DE all times together"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(VennDiagram)
+```
+
+```{r}
+outdir <- "/scripts/13_DEG/EachCelltypeSeparately/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/"
+```
+
+```{r}
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+DefaultAssay(df) <- "RNA"
+Idents(df) <- "sample"
+```
+
+```{r}
+# subset the data into separate clusters
+cl0_cells <- colnames(df)[df$integrated_snn_res.0.4 == 0]
+cl1_cells <- colnames(df)[df$integrated_snn_res.0.4 == 1]
+cl2_cells <- colnames(df)[df$integrated_snn_res.0.4 == 2]
+cl3_cells <- colnames(df)[df$integrated_snn_res.0.4 == 3]
+cl4_cells <- colnames(df)[df$integrated_snn_res.0.4 == 4]
+cl5_cells <- colnames(df)[df$integrated_snn_res.0.4 == 5]
+cl6_cells <- colnames(df)[df$integrated_snn_res.0.4 == 6]
+cl7_cells <- colnames(df)[df$integrated_snn_res.0.4 == 7]
+cl8_cells <- colnames(df)[df$integrated_snn_res.0.4 == 8]
+cl9_cells <- colnames(df)[df$integrated_snn_res.0.4 == 9]
+cl10_cells <- colnames(df)[df$integrated_snn_res.0.4 == 10]
+
+cl0 <- subset(df, cells = cl0_cells)
+cl1 <- subset(df, cells = cl1_cells)
+cl2 <- subset(df, cells = cl2_cells)
+cl3 <- subset(df, cells = cl3_cells)
+cl4 <- subset(df, cells = cl4_cells)
+cl5 <- subset(df, cells = cl5_cells)
+cl6 <- subset(df, cells = cl6_cells)
+cl7 <- subset(df, cells = cl7_cells)
+cl8 <- subset(df, cells = cl8_cells)
+cl9 <- subset(df, cells = cl9_cells)
+cl10 <- subset(df, cells = cl10_cells)
+```
+
+
+# Compare:
+* SCI-blood vs sham-blood
+* SCI-blood vs naive-blood
+* sham-blood vs naive-blood
+(within celltypes)
+
+[NB for cord vs blood the only celltypes we can compare is clusters 0, 1, 6, 10, 11]
+
+```{r}
+RunTests <- function(mydf, sampleID) {
+  # SCI-blood vs sham-blood
+  print("testing blood vs sham")
+  markers_SCIvsham <- FindMarkers(mydf, min.pct = 0.25, logfc.threshold = 0.25, ident.1 = "blood_SCI_veh", ident.2 = "blood_sham_veh")
+  markers_SCIvsham <- markers_SCIvsham %>% filter(p_val_adj <= 0.05)
+  markers_SCIvsham <- mutate(markers_SCIvsham, direction = ifelse(avg_log2FC > 0, "up", "down"))
+  markers_SCIvsham$gene <- rownames(markers_SCIvsham)
+  write.table(markers_SCIvsham, file = paste0(outdir, sampleID, "_markers_sciVsham.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  markers_SCIvsham_top10 <- markers_SCIvsham %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+  write.table(markers_SCIvsham_top10, file = paste0(outdir, sampleID, "_markers_sciVsham_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  # Remove Ribos
+  markers_SCIvsham_filt <- markers_SCIvsham[grep("^MT-|^RPS|^RPL", markers_SCIvsham$gene, invert = TRUE),]
+write.table(markers_SCIvsham_filt, file = paste0(outdir, sampleID, "_markers_SCIvsham", "_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  
+  # SCI-blood vs naive-blood
+  print("testing blood vs naive")
+  markers_SCIvnaive <- FindMarkers(mydf, min.pct = 0.25, logfc.threshold = 0.25, ident.1 = "blood_SCI_veh", ident.2 = "blood_naive_veh")
+  markers_SCIvnaive <- markers_SCIvnaive %>% filter(p_val_adj <= 0.05)
+  markers_SCIvnaive <- mutate(markers_SCIvnaive, direction = ifelse(avg_log2FC > 0, "up", "down"))
+  markers_SCIvnaive$gene <- rownames(markers_SCIvnaive)
+  write.table(markers_SCIvnaive, file = paste0(outdir, sampleID, "_markers_sciVnaive.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  markers_SCIvnaive_top10 <- markers_SCIvnaive %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+  write.table(markers_SCIvnaive_top10, file = paste0(outdir, sampleID, "_markers_sciVnaive_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  # Remove Ribos
+  markers_SCIvnaive_filt <- markers_SCIvnaive[grep("^MT-|^RPS|^RPL", markers_SCIvnaive$gene, invert = TRUE),]
+write.table(markers_SCIvnaive_filt, file = paste0(outdir, sampleID, "_markers_SCIvnaive", "_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  
+  # sham-blood vs naive-blood
+  print("testing sham vs naive")
+  markers_shamVnaive <- FindMarkers(mydf, min.pct = 0.25, logfc.threshold = 0.25, ident.1 = "blood_sham_veh", ident.2 = "blood_naive_veh")
+  markers_shamVnaive <- markers_shamVnaive %>% filter(p_val_adj <= 0.05)
+  markers_shamVnaive <- mutate(markers_shamVnaive, direction = ifelse(avg_log2FC > 0, "up", "down"))
+  markers_shamVnaive$gene <- rownames(markers_shamVnaive)
+  write.table(markers_shamVnaive, file = paste0(outdir, sampleID, "_markers_shamVnaive.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  markers_shamVnaive_top10 <- markers_shamVnaive %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+  write.table(markers_shamVnaive_top10, file = paste0(outdir, sampleID, "_markers_shamVnaive_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  # Remove Ribos
+  markers_shamVnaive_filt <- markers_shamVnaive[grep("^MT-|^RPS|^RPL", markers_shamVnaive$gene, invert = TRUE),]
+write.table(markers_shamVnaive_filt, file = paste0(outdir, sampleID, "_markers_shamVnaive", "_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  
+  # do some overlaps
+  print("making venn diagrams")
+  venn.diagram(
+  x = list(markers_SCIvsham$gene, markers_SCIvnaive$gene, markers_shamVnaive$gene),
+  category.names = c("SCI_vs_sham" , "SCI_vs_naive" , "sham_vs_naive"),
+  filename = paste0(outdir, sampleID, "_venn.jpeg"),
+  output=TRUE, disable.logging = TRUE,
+  resolution = 72, units = "in", height = 5, width = 5)
+  
+  venn.diagram(
+  x = list(markers_SCIvsham_filt$gene, markers_SCIvnaive_filt$gene, markers_shamVnaive_filt$gene),
+  category.names = c("SCI_vs_sham" , "SCI_vs_naive" , "sham_vs_naive"),
+  filename = paste0(outdir, sampleID, "_venn_RemoveRibos.jpeg"),
+  output=TRUE, disable.logging = TRUE,
+  resolution = 72, units = "in", height = 5, width = 5)
+}
+```
+
+```{r}
+RunTests(cl0, "cl0")
+RunTests(cl1, "cl1")
+RunTests(cl2, "cl2")
+RunTests(cl3, "cl3")
+RunTests(cl4, "cl4")
+RunTests(cl5, "cl5")
+RunTests(cl6, "cl6")
+RunTests(cl7, "cl7")
+RunTests(cl8, "cl8")
+RunTests(cl9, "cl9")
+RunTests(cl10, "cl10")
+```
+

@@ -1,0 +1,135 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+How to plot clusters (or other categorical variables) in the humanised mouse data
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+library(ggpubr)
+```
+
+```{r}
+# Data input
+
+## The paths here are to Laura's computer but I just directly synced them to the RDM, so if you can find e.g. the Thomas2022 folder on the RDM you can just change the start of the path to point to that
+
+## This is the path to the Seurat object of interest (see the TLDR summary in my Google Docs page)
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+# There are two "assay" slots in this Seurat object, "RNA" and "integrated". Data integration only uses the top 2000 most variable genes (for computational efficiency). For plotting gene expression we need to be in the "RNA" assay, because all the genes are present here. For cluter plotting it doesn't really matter
+# DefaultAssay(df) <- "RNA"
+
+## This is where you want to save the output
+outdir <- "/scripts/0_Figures/HowToPlotFigures/outdir/"
+```
+
+# Step 1: Define your palette
+
+Notes: 
+* You will need to have one colour for each condition in your metadata column of interest
+* Annoyingly, if you define clusters that don't exist in your real data it will still plot in the legend. You can remove it in your palette, or delete it in Illustrator later
+* To see all the metadata column options, type `head(df[[]])`
+
+```{r}
+palette_clust = c(
+            # T cells
+            `0` = "gold", #CD4
+            `1` = "orangered", #Treg
+            `3` = "deeppink2", #naive_CD8
+            `4` = "darkorchid4", #mem_CD8
+            `5` = "chocolate1", #naive_CD4
+            # B cells
+            `2` = "peachpuff4", #naive_memB 1+2 (1)
+            `8` = "peru", #naive_memB 1+2 (2)
+            # NKT
+            `6` = "limegreen", #NKT_DC
+            `7` = "forestgreen", #NKT_B & NKT_DC
+            # other
+            `9` = "darkturquoise", #basophil
+            `10` = "navyblue") #neutrophil
+
+palette_tissue = c(
+            # T cells
+            `blood` = "#AA413C",
+            `cord` = "#3374A3")
+
+palette_sample = c(`blood_SCI_veh` = "#3C0D03",
+                   `blood_SCI_ivig` = "#99280A",
+                    `blood_sham_veh` = "#EC9543",
+                   `blood_naive_veh` = "#F3C34D",
+                   `cord_SCI_veh` = "#0A3351",
+                   `cord_SCI_ivig` = "#3274A3")
+```
+
+# Option 1: The simplest plot
+
+```{r}
+DimPlot(df, group.by = "integrated_snn_res.0.4", cols = palette_clust)
+ggsave(filename = paste0(outdir, "simple_clusters.pdf"), width = 5, height = 5)
+
+# The same thing, but label the clusters and remove the legend
+DimPlot(df, group.by = "integrated_snn_res.0.4", cols = palette_clust, label = TRUE) +
+  NoLegend()
+ggsave(filename = paste0(outdir, "simple_clusters_label.pdf"), width = 5, height = 5)
+```
+
+# Option 2: Split out the samples by some condition
+
+Plotting notes: 
+* This is fine for getting a quick idea of a sample, but isn't great for figures
+    * It doesn't print a legend
+    * I can't remember if all the plots are on the same scale
+* NOTE: To see all the metadata column options, type `head(df[[]])`
+
+```{r}
+# The quick-and-dirty way (fine for checking, not great for figures)
+DimPlot(df, group.by = "integrated_snn_res.0.4", cols = palette_clust, split.by = "drug")
+# to save nicely, you probably want to set width to be height * nConditions (NB this is in inches)
+ggsave(filename = paste0(outdir, "simple_clusters_splitDrug.pdf"), width = 5, height = 5)
+```
+
+# Option 3: Make one plot per condition
+
+Plotting notes:
+* Samples
+    * Regardless of the metadata column you choose, you'll need to know what all the variables in this column are: you can check this with `unique(df$file)`
+    * Here we will save one plot for each condition
+* We are going to modify the plot (you can mix and match these - see ggplot2 plotting guidelines for more info)
+    * We're also going to make some other changes:
+          * Remove the X and Y axis text and ticks
+          * Remove the X and Y labels
+          * Add a custom title
+          * Make a separate file containing the legend (and don't include in the main plots)
+          
+```{r fig.height=10, fig.width=10}
+cells_ivig <- names(which(df$drug == "ivig"))
+cells_veh <- names(which(df$drug == "veh"))
+
+DimPlot(df, group.by = "integrated_snn_res.0.4", cols = palette_clust, cells = cells_ivig, pt.size = 0.5) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_ivigOnly.pdf"), width = 4, height = 4)
+
+DimPlot(df, group.by = "integrated_snn_res.0.4", cols = palette_clust, cells = cells_veh, pt.size = 0.5) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_vehOnly.pdf"), width = 4, height = 4)
+
+# this part needs the ggpubr package
+mylegend <- DimPlot(df, group.by = "integrated_snn_res.0.4", cols = palette_clust, cells = cells_veh)
+as_ggplot(get_legend(mylegend))
+ggsave(filename = paste0(outdir, "clusters_dimplot_legend.pdf"), width = 2, height = 3)
+```
+

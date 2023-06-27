@@ -1,0 +1,146 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# just edit for each file and run
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Clusterwise/outdir/"
+indir <- "/scripts/13_DEG/EachCelltypeSeparately/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/"
+sampleID <- "4.1_SCIvsshamnaive_blood"
+```
+
+
+```{r}
+data_files <- list.files(indir, full.names = TRUE, recursive = TRUE, pattern = ".txt")
+
+# List of the markers
+all_markers_file <- data_files[grep("Rb", data_files, invert = TRUE)]
+all_markers_file <- all_markers_file[grep("top10", all_markers_file, invert = TRUE)]
+```
+
+```{r}
+all_markers_file_cl0 <- all_markers_file[grep("cl0_", all_markers_file)]
+all_markers_file_cl1 <- all_markers_file[grep("cl1_", all_markers_file)]
+all_markers_file_cl2 <- all_markers_file[grep("cl2_", all_markers_file)]
+all_markers_file_cl3 <- all_markers_file[grep("cl3_", all_markers_file)]
+all_markers_file_cl4 <- all_markers_file[grep("cl4_", all_markers_file)]
+all_markers_file_cl5 <- all_markers_file[grep("cl5_", all_markers_file)]
+all_markers_file_cl6 <- all_markers_file[grep("cl6_", all_markers_file)]
+all_markers_file_cl7 <- all_markers_file[grep("cl7_", all_markers_file)]
+all_markers_file_cl8 <- all_markers_file[grep("cl8_", all_markers_file)]
+all_markers_file_cl9 <- all_markers_file[grep("cl9_", all_markers_file)]
+all_markers_file_cl10 <- all_markers_file[grep("cl10_", all_markers_file)]
+```
+
+
+```{r}
+prep_files_clusterwise <- function(data_files_subset) {
+  # where data_files_subset is data_files but containing only the cluster of interest
+  clusterID <- gsub("_.*", "", basename(data_files_subset[1]))
+  # get filepaths to each file in turn
+  sci_naive_file <- data_files_subset[grep("sciVnaive", data_files_subset)]
+  sham_naive_file <- data_files_subset[grep("shamVnaive", data_files_subset)]
+  sci_sham_file <- data_files_subset[grep("sciVsham", data_files_subset)]
+  # load the data
+  sci_naive_file <- read.delim(sci_naive_file, row.names = 1)
+  sham_naive_file <- read.delim(sham_naive_file, row.names = 1)
+  sci_sham_file <- read.delim(sci_sham_file, row.names = 1)
+  # split into up and down
+    # split into up and down
+  sci_naive_file_up <- sci_naive_file %>% filter(direction == "up")
+  sci_naive_file_down <- sci_naive_file %>% filter(direction == "down")
+  sham_naive_file_up <- sham_naive_file %>% filter(direction == "up")
+  sham_naive_file_down <- sham_naive_file %>% filter(direction == "down")
+  sci_sham_file_up <- sci_sham_file %>% filter(direction == "up")
+  sci_sham_file_down <- sci_sham_file %>% filter(direction == "down")
+  
+  # just process the upregulated genes
+  # get all the sci-related and all the cntl-related genes (regardless of whether they overlap)
+  all_sci_genes_up <- unique(c(sci_naive_file_up$gene, sci_sham_file_up$gene))
+  all_cntl_genes_up <- sham_naive_file_up$gene
+  # now get the sci-only, cntl-only, and overlap genes
+  filt_sci_genes_up <- setdiff(all_sci_genes_up, all_cntl_genes_up)
+  filt_cntl_genes_up <- setdiff(all_cntl_genes_up, all_sci_genes_up)
+  filt_sci_cntl_intersect_up <- intersect(all_cntl_genes_up, all_sci_genes_up)
+  # make a list
+  filt_sci_genes_up_t <- data.frame(gene = filt_sci_genes_up, cluster = rep(paste0("SCI_only_up_", clusterID), length(filt_sci_genes_up)))
+  filt_cntl_genes_up_t <- data.frame(gene = filt_cntl_genes_up, cluster = rep(paste0("cntl_only_up_", clusterID), length(filt_cntl_genes_up)))
+  filt_sci_cntl_intersect_up_t <- data.frame(gene = filt_sci_cntl_intersect_up, cluster = rep(paste0("SCI_cntl_overlap_", clusterID), length(filt_sci_cntl_intersect_up)))
+  
+  # just process the downregulated genes
+  # get all the sci-related and all the cntl-related genes (regardless of whether they overlap)
+  all_sci_genes_down <- unique(c(sci_naive_file_down$gene, sci_sham_file_down$gene))
+  all_cntl_genes_down <- sham_naive_file_down$gene
+  # now get the sci-only, cntl-only, and overlap genes
+  filt_sci_genes_down <- setdiff(all_sci_genes_down, all_cntl_genes_down)
+  filt_cntl_genes_down <- setdiff(all_cntl_genes_down, all_sci_genes_down)
+  filt_sci_cntl_intersect_down <- intersect(all_cntl_genes_down, all_sci_genes_down)
+  # make a list
+  filt_sci_genes_down_t <- data.frame(gene = filt_sci_genes_down, cluster = rep(paste0("SCI_only_down_", clusterID), length(filt_sci_genes_down)))
+  filt_cntl_genes_down_t <- data.frame(gene = filt_cntl_genes_down, cluster = rep(paste0("cntl_only_down_", clusterID), length(filt_cntl_genes_down)))
+  filt_sci_cntl_intersect_down_t <- data.frame(gene = filt_sci_cntl_intersect_down, cluster = rep(paste0("SCI_cntl_overlap_", clusterID), length(filt_sci_cntl_intersect_down)))
+  
+  # merge the lists
+genetable <- rbind(filt_sci_genes_down_t, filt_cntl_genes_down_t, filt_sci_cntl_intersect_down_t,
+                   filt_sci_genes_up_t, filt_cntl_genes_up_t, filt_sci_cntl_intersect_up_t)
+  # add in the cluster info
+  return(genetable)
+}
+```
+
+```{r}
+# process all the clusters
+table_list_cl0 <- prep_files_clusterwise(all_markers_file_cl0)
+table_list_cl1 <- prep_files_clusterwise(all_markers_file_cl1)
+table_list_cl2 <- prep_files_clusterwise(all_markers_file_cl2)
+table_list_cl3 <- prep_files_clusterwise(all_markers_file_cl3)
+table_list_cl4 <- prep_files_clusterwise(all_markers_file_cl4)
+table_list_cl5 <- prep_files_clusterwise(all_markers_file_cl5)
+table_list_cl6 <- prep_files_clusterwise(all_markers_file_cl6)
+table_list_cl7 <- prep_files_clusterwise(all_markers_file_cl7)
+table_list_cl8 <- prep_files_clusterwise(all_markers_file_cl8)
+table_list_cl9 <- prep_files_clusterwise(all_markers_file_cl9)
+table_list_cl10 <- prep_files_clusterwise(all_markers_file_cl10)
+```
+
+```{r}
+table_list_full <- rbind(table_list_cl0,
+                         table_list_cl1,
+                         table_list_cl2,
+                         table_list_cl3,
+                         table_list_cl4,
+                         table_list_cl5,
+                         table_list_cl6,
+                         table_list_cl7,
+                         table_list_cl8,
+                         table_list_cl9,
+                         table_list_cl10)
+```
+
+```{r}
+write.table(table_list_full, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# Remove the Ribos
+
+```{r}
+table_list_full_filt <- table_list_full[grep("^MT-|^RPS|^RPL", table_list_full$gene, invert = TRUE),]
+write.table(table_list_full_filt, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# Pull out the SCI-specific comparisons
+
+```{r}
+table_list_full_SCIonly <- table_list_full[grep("SCI_only", table_list_full$cluster),]
+write.table(table_list_full_SCIonly, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers_SCIonly.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+table_list_full_filt_SCIonly <- table_list_full_filt[grep("SCI_only", table_list_full_filt$cluster),]
+write.table(table_list_full_filt_SCIonly, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers_RemoveRbMt_SCIonly.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+

@@ -1,0 +1,95 @@
+outd---
+title: "DE all times together"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(VennDiagram)
+```
+
+```{r}
+outdir <- "/Volumes/SciDrive/Archive/SCI/HumanisedMouse/Thomas2022/4_DEG/EachCelltypeSeparately/4.4_vehVSivig_blood/outdir/"
+```
+
+```{r}
+df <- readRDS("/Volumes/SciDrive/Archive/SCI/HumanisedMouse/Thomas2022/1_FixHumanGeneNames+Reprocess/outdir/HumanisedMouse_FixGeneNames.RDS")
+DefaultAssay(df) <- "RNA"
+Idents(df) <- "sample"
+# Comparison: SCI blood vs sham blood (veh)
+```
+
+```{r}
+# subset the data into separate clusters
+cl0_cells <- colnames(df)[df$integrated_snn_res.0.5 == 0]
+cl1_cells <- colnames(df)[df$integrated_snn_res.0.5 == 1]
+cl2_cells <- colnames(df)[df$integrated_snn_res.0.5 == 2]
+cl3_cells <- colnames(df)[df$integrated_snn_res.0.5 == 3]
+cl4_cells <- colnames(df)[df$integrated_snn_res.0.5 == 4]
+cl5_cells <- colnames(df)[df$integrated_snn_res.0.5 == 5]
+cl6_cells <- colnames(df)[df$integrated_snn_res.0.5 == 6]
+cl7_cells <- colnames(df)[df$integrated_snn_res.0.5 == 7]
+cl8_cells <- colnames(df)[df$integrated_snn_res.0.5 == 8]
+cl9_cells <- colnames(df)[df$integrated_snn_res.0.5 == 9]
+cl10_cells <- colnames(df)[df$integrated_snn_res.0.5 == 10]
+cl11_cells <- colnames(df)[df$integrated_snn_res.0.5 == 11]
+cl12_cells <- colnames(df)[df$integrated_snn_res.0.5 == 12]
+cl13_cells <- colnames(df)[df$integrated_snn_res.0.5 == 13]
+
+cl0 <- subset(df, cells = cl0_cells)
+cl1 <- subset(df, cells = cl1_cells)
+cl2 <- subset(df, cells = cl2_cells)
+cl3 <- subset(df, cells = cl3_cells)
+cl4 <- subset(df, cells = cl4_cells)
+cl5 <- subset(df, cells = cl5_cells)
+cl6 <- subset(df, cells = cl6_cells)
+cl7 <- subset(df, cells = cl7_cells)
+cl8 <- subset(df, cells = cl8_cells)
+cl9 <- subset(df, cells = cl9_cells)
+cl10 <- subset(df, cells = cl10_cells)
+cl11 <- subset(df, cells = cl11_cells)
+cl12 <- subset(df, cells = cl12_cells)
+cl13 <- subset(df, cells = cl13_cells)
+```
+
+
+# Compare:
+* SCI-blood vs sham-blood
+* SCI-blood vs naive-blood
+* sham-blood vs naive-blood
+(within celltypes)
+
+[NB for cord vs blood the only celltypes we can compare is clusters 0, 1, 6, 10, 11]
+
+```{r}
+RunTests <- function(mydf, sampleID) {
+  # SCI-cord-blood VS SCI-blood_ivig
+  markers_cordVSblood <- FindMarkers(mydf, min.pct = 0.25, logfc.threshold = 0.25, ident.1 = "blood_ivig", ident.2 = "blood_veh")
+  markers_cordVSblood <- markers_cordVSblood %>% filter(p_val_adj <= 0.05)
+  markers_cordVSblood <- mutate(markers_cordVSblood, direction = ifelse(avg_log2FC > 0, "up", "down"))
+  markers_cordVSblood$geneID <- rownames(markers_cordVSblood)
+  write.table(markers_cordVSblood, file = paste0(outdir, sampleID, "_markers_ivigVSveh_blood.txt"), sep = "\t", quote = FALSE, col.names = NA)
+  markers_cordVSblood_top10 <- markers_cordVSblood %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+  write.table(markers_cordVSblood_top10, file = paste0(outdir, sampleID, "_markers_ivigVSveh_blood_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+}
+```
+
+```{r}
+RunTests(cl0, "cl0")
+RunTests(cl1, "cl1")
+RunTests(cl2, "cl2")
+RunTests(cl3, "cl3")
+RunTests(cl4, "cl4")
+RunTests(cl5, "cl5")
+RunTests(cl6, "cl6")
+RunTests(cl7, "cl7")
+RunTests(cl8, "cl8")
+RunTests(cl9, "cl9")
+RunTests(cl10, "cl10")
+RunTests(cl11, "cl11")
+RunTests(cl12, "cl12")
+RunTests(cl13, "cl13")
+```
+

@@ -1,0 +1,176 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+if (!requireNamespace("BiocManager", quietly=TRUE))
+    install.packages("BiocManager")
+BiocManager::install("pcaExplorer")
+library(pcaExplorer)
+library(PCAtools)
+```
+
+
+```{r}
+# Load libraries
+library(scater)
+library(Seurat)
+library(tidyverse)
+library(cowplot)
+library(Matrix.utils)
+library(edgeR)
+library(dplyr)
+library(magrittr)
+library(Matrix)
+library(purrr)
+library(reshape2)
+library(S4Vectors)
+library(tibble)
+library(SingleCellExperiment)
+library(pheatmap)
+#library(apeglm)
+library(png)
+library(DESeq2)
+library(RColorBrewer)
+```
+https://hbctraining.github.io/scRNA-seq/lessons/pseudobulk_DESeq2_scrnaseq.html
+https://bioconductor.org/packages/devel/bioc/vignettes/pcaExplorer/inst/doc/pcaExplorer.html
+
+```{r}
+outdir <- "/scripts/15_PCAPlot/outdir/"
+
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+Idents(df) <- "file"
+```
+
+```{r}
+# Extract raw counts and metadata to create SingleCellExperiment object
+counts <- df@assays$RNA@counts 
+
+metadata <- df@meta.data
+
+# Set up metadata as desired for aggregation and DE analysis
+metadata$cluster_id <- factor(df@active.ident)
+
+# Create single cell experiment object
+sce <- SingleCellExperiment(assays = list(counts = counts), 
+                           colData = metadata)
+
+# Identify groups for aggregation of counts
+groups <- colData(sce)[, c("cluster_id", "sample", "injury", "tissue", "drug"),drop = FALSE]
+```
+# Acquiring necessary metrics for aggregation across cells in a sample
+
+```{r}
+# Named vector of cluster names
+kids <- purrr::set_names(levels(sce$cluster_id))
+kids
+
+# Total number of clusters
+nk <- length(kids)
+nk
+
+# Named vector of sample names
+sids <- purrr::set_names(levels(sce$cluster_id))
+
+# Total number of samples 
+ns <- length(sids)
+ns
+
+```
+
+```{r}
+# Generate sample level metadata
+
+## Determine the number of cells per sample
+table(sce$cluster_id)
+
+## Turn named vector into a numeric vector of number of cells per sample
+n_cells <- as.numeric(table(sce$cluster_id))
+
+## Determine how to reoder the samples (rows) of the metadata to match the order of sample names in sids vector
+m <- match(sids, sce$cluster_id)
+
+## Create the sample level metadata by combining the reordered metadata with the number of cells corresponding to each sample.
+ei <- data.frame(colData(sce)[m, c("file", "sample", "injury", "tissue", "drug")], 
+                  n_cells, row.names = NULL)
+ei
+```
+
+```{r}
+
+
+# Perform QC if not already performed
+dim(sce)
+
+# Calculate quality control (QC) metrics
+sce2 <- perCellQCMetrics(sce)
+
+# Get cells w/ few/many detected genes
+#sce$is_outlier <- isOutlier(
+#        metric = sce$total_features_by_counts,
+#        nmads = 2, type = "both", log = TRUE)
+
+# Remove outlier cells
+#sce <- sce[, !sce$is_outlier]
+#dim(sce)
+
+## Remove lowly expressed genes which have less than 10 cells with any counts
+sce <- sce[rowSums(counts(sce) > 1) >= 10, ]
+
+dim(sce)
+```
+# Count aggregation to sample level
+
+
+```{r}
+# Aggregate the counts per sample_id and cluster_id
+
+# Subset metadata to only include the cluster and sample IDs to aggregate across
+groups <- colData(sce)[, c("cluster_id")]
+
+# Aggregate across cluster-sample groups
+pb <- aggregate.Matrix(t(counts(sce)), 
+                       groupings = groups, fun = "sum") 
+
+class(pb)
+
+dim(pb)
+
+pb[1:6, 1:6]
+```
+
+# Generate PCA plot
+
+```{r}
+pr.pca <- prcomp(pb2, center = TRUE,scale. = TRUE)
+pr.pca_flip <- prcomp(pb, center = TRUE,scale. = TRUE)
+
+# redo with sample names
+pb_names <- pb
+rownames(pb_names) <- ei2$sample
+pb_names.pca_flip <- prcomp(pb_names, center = TRUE,scale. = TRUE)
+```
+
+```{r}
+library(factoextra)
+fviz_pca_ind(pb_names.pca_flip,
+             col.ind = "cos2", # Color by the quality of representation
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE     # Avoid text overlapping
+             )
+```
+
+```{r}
+fviz_eig(pb_names.pca_flip)
+```
+# what if i filter the count matrix to top 2000 variable genes?
+
+```{r}
+pb_filt <- as.matrix(pb_names)
+pb_filt <- pb_filt[,df@assays$integrated@var.features]
+
+
+```
+

@@ -1,0 +1,137 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+sampleID <- "4.4"
+markers_all <- read.delim("/scripts/13b_ProcessForGO/Samplewise/outdir/4.4_vehVSivig_blood_Markers.txt")
+markers_noRb <- read.delim("/scripts/13b_ProcessForGO/Samplewise/outdir/4.4_vehVSivig_blood_Markers_dropRbMt.txt")
+GO_noRb <- read.delim("/scripts/14_GO/Samplewise_AllGenes_RemoveRbMt/outdir_4.4/clust_4.4_top100GO_FiltSimp.txt")
+
+outdir <- "/scripts/0_Figures/Fig_NbrDEGsAndGO/Samplewise/outdir/"
+```
+
+```{r}
+palette_sample = c(`blood_SCI_veh` = "#3C0D03",
+                   `blood_SCI_ivig` = "#99280A",
+                    `blood_sham_veh` = "#EC9543",
+                   `blood_naive_veh` = "#F3C34D",
+                   `cord_SCI_veh` = "#0A3351",
+                   `cord_SCI_ivig` = "#3274A3")
+
+palette_clust = c(
+            # T cells
+            `0` = "gold", #CD4
+            `1` = "orangered", #Treg
+            `3` = "deeppink2", #naive_CD8
+            `4` = "darkorchid4", #mem_CD8
+            `5` = "chocolate1", #naive_CD4
+            # B cells
+            `2` = "peachpuff4", #naive_memB 1+2 (1)
+            `8` = "peru", #naive_memB 1+2 (2)
+            # NKT
+            `6` = "limegreen", #NKT_DC
+            `7` = "forestgreen", #NKT_B & NKT_DC
+            # other
+            `9` = "darkturquoise", #basophil
+            `10` = "navyblue") #neutrophil
+
+palette_dir = c(`down` = "#2166AC",
+                `up` = "#B2182B")
+
+palette_dirRb = c(`down_noRb` = "#2166AC",
+                  `down_NbrRibo` = "#90B2D5",
+                `up_noRb` = "#B2182B",
+                `up_nbrRibo` = "#D88B95"
+                )
+```
+
+```{r}
+nbr_markers_all <- as.data.frame(table(markers_all$cluster))
+colnames(nbr_markers_all) <- c("direction", "# of markers")
+nbr_markers_noRb <- as.data.frame(table(markers_noRb$cluster))
+colnames(nbr_markers_noRb) <- c("direction", "# of markers")
+```
+
+```{r}
+ggplot(nbr_markers_all, aes(x=direction, y=`# of markers`, fill = direction)) + 
+    geom_bar(stat = "identity") +
+    scale_fill_manual(values = palette_dir) +
+    theme(legend.position="none") +
+    theme_bw() + 
+    geom_text(aes(label = `# of markers`), vjust = -1, color="black", size = 2)
+ggsave(filename = paste0(outdir, sampleID, "_NumberOfDEGs_all.pdf"), width = 5, height = 4)
+```
+
+```{r}
+ggplot(nbr_markers_noRb, aes(x=direction, y=`# of markers`, fill = direction)) + 
+    geom_bar(stat = "identity") +
+    scale_fill_manual(values = palette_dir) +
+    theme(legend.position="none") +
+    theme_bw() + 
+    geom_text(aes(label = `# of markers`), vjust = -1, color="black", size = 2)
+ggsave(filename = paste0(outdir, sampleID, "_NumberOfDEGs_dropRbMt.pdf"), width = 5, height = 4)
+```
+
+# same thing, but make a stacked bar showing the number of Rb and non-Rb genes there are
+
+```{r}
+# first, calculate the diffrence between nbr_markers_all and nbr_markers_noRb (i.e. total number of Rb genes)
+nbr_markers_noRb_temp <- nbr_markers_noRb
+colnames(nbr_markers_noRb_temp) <- c("direction", "noRb")
+nbr_markers_all_temp <- nbr_markers_all
+colnames(nbr_markers_all_temp) <- c("direction", "Rb")
+temp <- cbind(nbr_markers_noRb_temp, nbr_markers_all_temp)
+temp <- temp[,c(1,2,4)]
+temp <- mutate(temp, NbrRibo = Rb - noRb)
+temp <- temp[,c(1,2,4)] # remove the "Rb" column
+# make long
+nbr_markers_both <- reshape2::melt(temp)
+# add a separate fill column
+nbr_markers_both <- mutate(nbr_markers_both, myfill = paste0(direction, "_", variable))
+```
+
+```{r}
+ggplot(nbr_markers_both, aes(fill = myfill, y = value, x = direction)) + 
+    geom_bar(position="stack", stat="identity") +
+  scale_fill_manual(values = palette_dirRb) +
+    theme(legend.position="none") +
+    theme_bw()
+ggsave(filename = paste0(outdir, sampleID, "_NumberOfDEGs_Rb+NoRb.pdf"), width = 5, height = 4)
+```
+
+# Now plot the number of enriched GO terms
+
+```{r}
+NbrGo <- as.data.frame(table(GO_noRb %>% filter(p.adjust <= 0.05) %>% pull(Cluster)))
+# check that both up and down GO is found - if  not, add them in
+if (!("up" %in% NbrGo$Var1)) {
+  NbrGo <- rbind(NbrGo, (data.frame(Var1 = "up", Freq = 0)))
+}
+
+if (!("down" %in% NbrGo$Var1)) {
+  NbrGo <- rbind(NbrGo, (data.frame(Var1 = "down", Freq = 0)))
+}
+colnames(NbrGo) <- c("direction", "# of GO terms")
+```
+
+```{r}
+# make sure down is always first
+NbrGo$direction <- factor(NbrGo$direction, levels = c("down", "up"))
+```
+
+```{r}
+ggplot(NbrGo, aes(x=direction, y=`# of GO terms`, fill = direction)) + 
+    geom_bar(stat = "identity") +
+    scale_fill_manual(values = palette_dir) +
+    theme(legend.position="none") +
+    theme_bw() + 
+    geom_text(aes(label = `# of GO terms`), vjust = -1, color="black", size = 2)
+ggsave(filename = paste0(outdir, sampleID, "_NumberOfGO_dropRbMt.pdf"), width = 5, height = 4)
+```

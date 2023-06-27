@@ -1,0 +1,102 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# just edit for each file and run
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Samplewise/outdir/"
+indir <- "/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/"
+sampleID <- "4.1_SCIvsshamnaive_blood"
+```
+
+```{r}
+data_files <- list.files(indir, full.names = TRUE, recursive = TRUE, pattern = ".txt")
+
+# List of the markers
+all_markers_file <- data_files[grep("Rb", data_files, invert = TRUE)]
+all_markers_file <- all_markers_file[grep("top10", all_markers_file, invert = TRUE)]
+```
+
+# Process the "all markers" files
+DE list = text file of DE gene, in format: {gene | direction | p_val_adj | cluster}
+
+```{r}
+  #sampleID <- gsub(".*_", "", basename(data_files[1])) %>% gsub(".txt", "", .)
+  # get filepaths to each file in turn
+  sci_naive_file <- all_markers_file[grep("sciVnaive", all_markers_file)]
+  sham_naive_file <- all_markers_file[grep("shamVnaive", all_markers_file)]
+  sci_sham_file <- all_markers_file[grep("sciVsham", all_markers_file)]
+  # load the data
+  sci_naive_file <- read.delim(sci_naive_file, row.names = 1)
+  sham_naive_file <- read.delim(sham_naive_file, row.names = 1)
+  sci_sham_file <- read.delim(sci_sham_file, row.names = 1)
+  
+  # split into up and down
+  sci_naive_file_up <- sci_naive_file %>% filter(direction == "up")
+  sci_naive_file_down <- sci_naive_file %>% filter(direction == "down")
+  sham_naive_file_up <- sham_naive_file %>% filter(direction == "up")
+  sham_naive_file_down <- sham_naive_file %>% filter(direction == "down")
+  sci_sham_file_up <- sci_sham_file %>% filter(direction == "up")
+  sci_sham_file_down <- sci_sham_file %>% filter(direction == "down")
+``` 
+
+```{r}
+# get all the sci-related and all the cntl-related genes (regardless of whether they overlap)
+all_sci_genes_up <- unique(c(sci_naive_file_up$gene, sci_sham_file_up$gene))
+all_cntl_genes_up <- sham_naive_file_up$gene
+# now get the sci-only, cntl-only, and overlap genes
+filt_sci_genes_up <- setdiff(all_sci_genes_up, all_cntl_genes_up)
+filt_cntl_genes_up <- setdiff(all_cntl_genes_up, all_sci_genes_up)
+filt_sci_cntl_intersect_up <- intersect(all_cntl_genes_up, all_sci_genes_up)
+  
+# make a list
+filt_sci_genes_up_t <- data.frame(gene = filt_sci_genes_up, cluster = rep("SCI_only_up", length(filt_sci_genes_up)))
+filt_cntl_genes_up_t <- data.frame(gene = filt_cntl_genes_up, cluster = rep("cntl_only_up", length(filt_cntl_genes_up)))
+filt_sci_cntl_intersect_up_t <- data.frame(gene = filt_sci_cntl_intersect_up, cluster = rep("SCI_cntl_overlap_up", length(filt_sci_cntl_intersect_up)))
+```
+
+```{r}
+# get all the sci-related and all the cntl-related genes (regardless of whether they overlap)
+all_sci_genes_down <- unique(c(sci_naive_file_down$gene, sci_sham_file_down$gene))
+all_cntl_genes_down <- sham_naive_file_down$gene
+# now get the sci-only, cntl-only, and overlap genes
+filt_sci_genes_down <- setdiff(all_sci_genes_down, all_cntl_genes_down)
+filt_cntl_genes_down <- setdiff(all_cntl_genes_down, all_sci_genes_down)
+filt_sci_cntl_intersect_down <- intersect(all_cntl_genes_down, all_sci_genes_down)
+  
+# make a list
+filt_sci_genes_down_t <- data.frame(gene = filt_sci_genes_down, cluster = rep("SCI_only_down", length(filt_sci_genes_down)))
+filt_cntl_genes_down_t <- data.frame(gene = filt_cntl_genes_down, cluster = rep("cntl_only_down", length(filt_cntl_genes_down)))
+filt_sci_cntl_intersect_down_t <- data.frame(gene = filt_sci_cntl_intersect_down, cluster = rep("SCI_cntl_overlap_down", length(filt_sci_cntl_intersect_down)))
+```
+
+
+```{r}
+genetable <- rbind(filt_sci_genes_down_t, filt_cntl_genes_down_t, filt_sci_cntl_intersect_down_t,
+                   filt_sci_genes_up_t, filt_cntl_genes_up_t, filt_sci_cntl_intersect_up_t)
+write.table(genetable, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+
+# Remove the Ribos
+
+```{r}
+genetable_filt <- genetable[grep("^MT-|^RPS|^RPL", genetable$gene, invert = TRUE),]
+write.table(genetable_filt, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# Pull out the SCI-specific comparisons
+
+```{r}
+genetable_SCIonly <- genetable[grep("SCI_only", genetable$cluster),]
+write.table(genetable_SCIonly, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers_SCIonly.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+genetable_filt_SCIonly <- genetable_filt[grep("SCI_only", genetable_filt$cluster),]
+write.table(genetable_filt_SCIonly, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers_RemoveRbMt_SCIonly.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```

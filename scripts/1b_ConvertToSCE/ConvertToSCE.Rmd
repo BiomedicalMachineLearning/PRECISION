@@ -1,0 +1,38 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+```
+
+```{r}
+outdir <- "/scripts/1b_ConvertToSCE/outdir/"
+
+B1 <- readRDS("/scripts/1_ChangeHumanNames/outdir/B1.RDS")
+B2 <- readRDS("/scripts/1_ChangeHumanNames/outdir/B2.RDS")
+B3 <- readRDS("/scripts/1_ChangeHumanNames/outdir/B3.RDS")
+B4 <- readRDS("/scripts/1_ChangeHumanNames/outdir/B4.RDS")
+C2 <- readRDS("/scripts/1_ChangeHumanNames/outdir/C2.RDS")
+C3 <- readRDS("/scripts/1_ChangeHumanNames/outdir/C3.RDS")
+```
+
+```{r}
+B1.sce <- as.SingleCellExperiment(B1)
+B2.sce <- as.SingleCellExperiment(B2)
+B3.sce <- as.SingleCellExperiment(B3)
+B4.sce <- as.SingleCellExperiment(B4)
+C2.sce <- as.SingleCellExperiment(C2)
+C3.sce <- as.SingleCellExperiment(C3)
+```
+
+```{r}
+saveRDS(B1.sce, file = paste0(outdir, "B1_sce.RDS"))
+saveRDS(B2.sce, file = paste0(outdir, "B2_sce.RDS"))
+saveRDS(B3.sce, file = paste0(outdir, "B3_sce.RDS"))
+saveRDS(B4.sce, file = paste0(outdir, "B4_sce.RDS"))
+saveRDS(C2.sce, file = paste0(outdir, "C2_sce.RDS"))
+saveRDS(C3.sce, file = paste0(outdir, "C3_sce.RDS"))
+```
+

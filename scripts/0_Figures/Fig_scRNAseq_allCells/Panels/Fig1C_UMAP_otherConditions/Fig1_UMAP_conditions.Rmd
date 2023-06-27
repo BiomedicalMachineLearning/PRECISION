@@ -1,0 +1,79 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+```
+
+
+```{r}
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+
+outdir <- "/scripts/0_Figures/Fig1_proportions/Panels/Fig1C_UMAP_otherConditions/outdir/"
+```
+
+```{r}
+palette_tissue = c(
+            # T cells
+            `blood` = "#AA413C",
+            `cord` = "#3374A3")
+
+palette_sample = c(`blood_SCI_veh` = "#3C0D03",
+                   `blood_SCI_ivig` = "#99280A",
+                    `blood_sham_veh` = "#EC9543",
+                   `blood_naive_veh` = "#F3C34D",
+                   `cord_SCI_veh` = "#0A3351",
+                   `cord_SCI_ivig` = "#3274A3")
+```
+
+```{r fig.height=10, fig.width=10}
+plot <- DimPlot(df, group.by = "tissue", cols = palette_tissue, pt.size = 0.5)
+
+xrange <- ggplot_build(plot)$layout$panel_scales_x[[1]]$range$range
+yrange <- ggplot_build(plot)$layout$panel_scales_y[[1]]$range$range
+
+# get legend
+mylegend <- get_legend(plot)
+mylegend <- as_ggplot(mylegend)
+ggsave(plot = mylegend, filename = paste0(outdir, "tissue_dimplot_legend.eps"))
+
+
+# plot without legend
+plot +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "tissue_dimplot.eps"), width = 4, height = 4)
+```
+
+```{r fig.height=10, fig.width=10}
+plot <- DimPlot(df, group.by = "sample", cols = palette_sample, pt.size = 0.5, shuffle = TRUE)
+
+xrange <- ggplot_build(plot)$layout$panel_scales_x[[1]]$range$range
+yrange <- ggplot_build(plot)$layout$panel_scales_y[[1]]$range$range
+
+# get legend
+mylegend <- get_legend(plot)
+mylegend <- as_ggplot(mylegend)
+ggsave(plot = mylegend, filename = paste0(outdir, "sample_dimplot_legend.eps"))
+
+
+# plot without legend
+plot +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "sample_dimplot.eps"), width = 4, height = 4)
+```

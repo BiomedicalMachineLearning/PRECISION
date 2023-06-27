@@ -1,0 +1,41 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# just edit for each file and run
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Samplewise/outdir/"
+indir <- "/scripts/13_DEG/AllCellsTogether/4.2_bloodVScord_veh/outdir/"
+sampleID <- "4.2_bloodVScord_veh"
+```
+
+
+```{r}
+data_files <- list.files(indir, full.names = TRUE, recursive = TRUE, pattern = ".txt")
+
+all_markers_file <- data_files[grep("markers.txt", data_files)]
+dropRb_markers_file <- data_files[grep("markers_RemoveRbMt.txt", data_files)]
+```
+
+```{r}
+df <- read.delim(all_markers_file, row.names = 1)
+df$cluster <- df$direction
+df$direction <- NULL
+df <- mutate(df, avg_log2FC_abs = abs(avg_log2FC))
+df <- df %>% group_by(cluster) %>% arrange(desc(avg_log2FC_abs, by_group = cluster))
+
+df_noRb <- read.delim(dropRb_markers_file, row.names = 1)
+df_noRb$cluster <- df_noRb$direction
+df_noRb$direction <- NULL
+df_noRb <- mutate(df_noRb, avg_log2FC_abs = abs(avg_log2FC))
+df_noRb <- df_noRb %>% group_by(cluster) %>% arrange(desc(avg_log2FC_abs, by_group = cluster))
+
+write.table(df, file = paste0(outdir, sampleID, "_Markers.txt"), sep = "\t", quote =  FALSE, col.names = NA)
+write.table(df_noRb, file = paste0(outdir, sampleID, "_Markers_dropRbMt.txt"), sep = "\t", quote =  FALSE, col.names = NA)
+```

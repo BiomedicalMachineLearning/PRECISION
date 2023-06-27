@@ -1,0 +1,25 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Samplewise/SCIvsShamOnly/outdir/"
+DEGs_sciVsham <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvsham_RemoveRbMt.txt")
+#DEGs_sciVnaive <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvnaive_RemoveRbMt.txt")
+#DEGs_shamVnaive <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_shamVnaive_RemoveRbMt.txt")
+sampleID <- "SCIvSham"
+```
+
+```{r}
+DEGs_sciVsham_2 <- DEGs_sciVsham[,c("X", "direction")]
+colnames(DEGs_sciVsham_2) <- c("gene", "cluster")
+# there shouldn't be any Mt/Rb genes but filter to be safe
+DEGs_sciVsham_2 <- DEGs_sciVsham_2[grep("^MT-|^RPS|^RPL", DEGs_sciVsham_2$gene, invert = TRUE),]
+write.table(DEGs_sciVsham_2, file = paste0(outdir, "sciVSsham.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+

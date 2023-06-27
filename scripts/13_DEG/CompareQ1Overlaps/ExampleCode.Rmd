@@ -1,0 +1,28 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+
+```{r}
+sciVn <- read.delim("/Volumes/SciDrive/Archive/SCI/HumanisedMouse/Thomas2022/4_DEG/EachCelltypeSeparately/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/cl0_markers_sciVnaive.txt") %>% filter(p_val_adj <= 0.05)
+sciVsh <- read.delim("/Volumes/SciDrive/Archive/SCI/HumanisedMouse/Thomas2022/4_DEG/EachCelltypeSeparately/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/cl0_markers_sciVsham.txt") %>% filter(p_val_adj <= 0.05)
+shVnv <- read.delim("/Volumes/SciDrive/Archive/SCI/HumanisedMouse/Thomas2022/4_DEG/EachCelltypeSeparately/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/cl0_markers_shamVnaive.txt") %>% filter(p_val_adj <= 0.05)
+```
+
+```{r}
+sciVn_hits <- sciVn %>% filter(direction == "up") %>% pull(geneID)
+sciVsh_hits <- sciVsh %>% filter(direction == "up") %>% pull(geneID)
+shVnv_hits <- shVnv %>% filter(direction == "up") %>% pull(geneID)
+```
+
+```{r}
+clipr::write_clip(sciVn_hits)
+clipr::write_clip(sciVsh_hits)
+clipr::write_clip(shVnv_hits)
+```
+

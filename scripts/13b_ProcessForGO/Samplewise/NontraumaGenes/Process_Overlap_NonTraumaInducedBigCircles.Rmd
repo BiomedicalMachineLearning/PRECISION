@@ -1,0 +1,70 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Samplewise/NontraumaGenes/outdir/"
+DEGs_sciVsham <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvsham_RemoveRbMt.txt")
+DEGs_sciVnaive <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvnaive_RemoveRbMt.txt")
+DEGs_shamVnaive <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_shamVnaive_RemoveRbMt.txt")
+
+trauma <- read.delim("/scripts/13b_ProcessForGO/Samplewise/TraumaInducedGenes/outdir/TraumaGenes.txt")
+```
+
+```{r}
+# find the overlap between SCIvNaive in up and down
+# i.e. in sciVnaive and shamVnaive but not sciVsham
+
+# first split into up and down
+DEGs_sciVsham_up <- DEGs_sciVsham %>% filter(direction == "up")
+DEGs_sciVnaive_up <- DEGs_sciVnaive %>% filter(direction == "up")
+DEGs_shamVnaive_up <- DEGs_shamVnaive %>% filter(direction == "up")
+
+DEGs_sciVsham_down <- DEGs_sciVsham %>% filter(direction == "down")
+DEGs_sciVnaive_down <- DEGs_sciVnaive %>% filter(direction == "down")
+DEGs_shamVnaive_down <- DEGs_shamVnaive %>% filter(direction == "down")
+
+# get the upregulated overlap
+up_trauma <- trauma %>% filter(cluster == "up")
+down_trauma <- trauma %>% filter(cluster == "down")
+```
+
+# remove the trauma genes
+
+```{r}
+DEGs_sciVsham_up_filt <- DEGs_sciVsham_up[!(DEGs_sciVsham_up$gene %in% up_trauma$gene),]
+DEGs_sciVnaive_up_filt <- DEGs_sciVnaive_up[!(DEGs_sciVnaive_up$gene %in% up_trauma$gene),]
+DEGs_shamVnaive_up_filt <- DEGs_shamVnaive_up[!(DEGs_shamVnaive_up$gene %in% up_trauma$gene),]
+
+DEGs_sciVsham_down_filt <- DEGs_sciVsham_down[!(DEGs_sciVsham_down$gene %in% down_trauma$gene),]
+DEGs_sciVnaive_down_filt <- DEGs_sciVnaive_down[!(DEGs_sciVnaive_down$gene %in% down_trauma$gene),]
+DEGs_shamVnaive_down_filt <- DEGs_shamVnaive_down[!(DEGs_shamVnaive_down$gene %in% down_trauma$gene),]
+```
+
+```{r}
+# add the comparison name
+DEGs_sciVsham_up_filt$comparison <- "sciVsham"
+DEGs_sciVsham_down_filt$comparison <- "sciVsham"
+
+DEGs_sciVnaive_up_filt$comparison <- "sciVnaive"
+DEGs_sciVnaive_down_filt$comparison <- "sciVnaive"
+
+DEGs_shamVnaive_up_filt$comparison <- "shamVnaive"
+DEGs_shamVnaive_down_filt$comparison <- "shamVnaive"
+```
+
+# merge
+```{r}
+all <- rbind(DEGs_sciVsham_up_filt, DEGs_sciVsham_down_filt,
+             DEGs_sciVnaive_up_filt, DEGs_sciVnaive_down_filt,
+             DEGs_shamVnaive_up_filt, DEGs_shamVnaive_down_filt)
+all <- all[grep("^MT-|^RPS|^RPL", all$gene, invert = TRUE),]
+all <- mutate(all, cluster = paste0(comparison, "_", direction))
+all_simple <- all[,c("gene", "cluster")]
+write.table(all_simple, file = paste0(outdir, "nonTraumaGenes_3mainVennCircles.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```

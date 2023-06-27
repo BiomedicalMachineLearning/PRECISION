@@ -1,0 +1,65 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# just edit for each file and run
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Clusterwise/4.1_splitIntoVennSegments/PutClustersTogether_outdir/"
+indir <- "/scripts/13b_ProcessForGO/Clusterwise/4.1_splitIntoVennSegments/outdir/"
+sampleID <- "4.1_segments"
+```
+
+
+```{r}
+data_files <- list.files(indir, full.names = TRUE, recursive = TRUE, pattern = ".txt")
+data_files_up <- data_files[grep("up_VennSegments.txt", data_files)]
+data_files_down <- data_files[grep("down_VennSegments.txt", data_files)]
+```
+
+```{r}
+prep_files <- function(myfile) {
+  clusterID <- gsub("_.*", "", basename(myfile))
+  direction <- gsub("_VennSegments.txt", "", basename(myfile)) %>% gsub("^.*_", "", .)
+  df_temp <- read.delim(myfile, row.names = 1)
+  if(nrow(df_temp) > 0) {
+    df_temp$direction <- direction
+    df_temp$clusterID <- clusterID
+    df_temp <- mutate(df_temp, cluster = paste0(clusterID, "_", direction))
+    rownames(df_temp) <- NULL
+    return(df_temp) 
+  }
+}
+```
+
+```{r}
+df_up <- lapply(data_files_up, prep_files) %>% bind_rows()
+df_down <- lapply(data_files_down, prep_files) %>% bind_rows()
+df_all <- rbind(df_up, df_down)
+df_all <- mutate(df_all, clustergroups = paste0(groups, "_", cluster))
+```
+
+# prepare for GO
+
+```{r}
+# all clusters and conditions together
+df_all_simple <- df_all[,c("genes", "clustergroups")]
+colnames(df_all_simple) <- c("gene", "cluster")
+write.table(df_all_simple, file = paste0(outdir, "SegmentsForGO_all.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+# split into the different df_all categories
+GetTables <- function(mygroup) {
+  df_filt <- df_all %>% filter(groups == mygroup)
+  df_filt_simple <- df_filt[,c("genes", "cluster")]
+  colnames(df_filt_simple) <- c("gene", "cluster")
+  write.table(df_filt_simple, file = paste0(outdir, "SegmentsForGO_", mygroup, ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+}
+
+lapply(unique(df_all$groups), GetTables)
+```
+

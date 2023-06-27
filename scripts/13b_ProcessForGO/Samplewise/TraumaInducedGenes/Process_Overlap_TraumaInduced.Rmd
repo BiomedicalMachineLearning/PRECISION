@@ -1,0 +1,52 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Samplewise/TraumaInducedGenes/outdir/"
+DEGs_sciVsham <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvsham_RemoveRbMt.txt")
+DEGs_sciVnaive <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvnaive_RemoveRbMt.txt")
+DEGs_shamVnaive <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_shamVnaive_RemoveRbMt.txt")
+sampleID <- "4.4v4.5"
+```
+
+```{r}
+# find the overlap between SCIvNaive in up and down
+# i.e. in sciVnaive and shamVnaive but not sciVsham
+
+# first split into up and down
+DEGs_sciVsham_up <- DEGs_sciVsham %>% filter(direction == "up")
+DEGs_sciVnaive_up <- DEGs_sciVnaive %>% filter(direction == "up")
+DEGs_shamVnaive_up <- DEGs_shamVnaive %>% filter(direction == "up")
+
+DEGs_sciVsham_down <- DEGs_sciVsham %>% filter(direction == "down")
+DEGs_sciVnaive_down <- DEGs_sciVnaive %>% filter(direction == "down")
+DEGs_shamVnaive_down <- DEGs_shamVnaive %>% filter(direction == "down")
+
+# get the upregulated overlap
+up_trauma <- setdiff((intersect(DEGs_sciVnaive_up$X, DEGs_shamVnaive_up$X)), DEGs_sciVsham_up$X)
+down_trauma <- setdiff((intersect(DEGs_sciVnaive_down$X, DEGs_shamVnaive_down$X)), DEGs_sciVsham_down$X)
+```
+
+```{r}
+# format as a table
+up_trauma <- as.data.frame(up_trauma)
+up_trauma$cluster <- "up"
+colnames(up_trauma) <- c("gene", "cluster")
+
+down_trauma <- as.data.frame(down_trauma)
+down_trauma$cluster <- "down"
+colnames(down_trauma) <- c("gene", "cluster")
+
+# merge
+allgenes <- rbind(up_trauma, down_trauma)
+# there shouldn't be any Mt/Rb genes but filter to be safe
+allgenes <- allgenes[grep("^MT-|^RPS|^RPL", allgenes$gene, invert = TRUE),]
+write.table(allgenes, file = paste0(outdir, "TraumaGenes.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+

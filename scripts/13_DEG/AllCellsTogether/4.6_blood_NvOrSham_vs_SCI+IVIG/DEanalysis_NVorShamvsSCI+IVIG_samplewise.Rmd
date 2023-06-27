@@ -1,0 +1,172 @@
+---
+title: "DE all times together"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13_DEG/AllCellsTogether/4.6_blood_NvOrSham_vs_SCI+IVIG/outdir/"
+```
+
+```{r}
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+DefaultAssay(df) <- "RNA"
+Idents(df) <- "sample"
+```
+
+# Compare:
+* sham-blood vs (SCI-blood + IVIG-blood)
+* naive-blood vs (SCI-blood + IVIG-blood)
+* SCI-blood vs (sham + naive)
+* IVIG-blood vs (sham + naive)
+
+```{r}
+#make groups
+meta <- df[[]]
+# column 1: merge tissue and injury
+meta <- mutate(meta, tissueinjury = paste0(tissue, "_", injury))
+# column 2: merge naive and sham
+meta$mergeNvSham <- meta$sample %>% gsub("blood_sham_veh", "blood_ShamNv", .) %>% gsub("blood_naive_veh", "blood_ShamNv", .)
+
+meta <- meta[,c("tissueinjury", "mergeNvSham")]
+df <- AddMetaData(df, meta)
+```
+
+# Analysis 1a: blood_sham vs blood_SCI (IVIG + veh)
+
+```{r}
+# blood_sham vs blood_SCI (IVIG + veh)
+Idents(df) <- "tissueinjury"
+markers_SCIvsham <- FindMarkers(df, min.pct = 0.25, logfc.threshold = 0.25, ident.1 = "blood_SCI", ident.2 = "blood_sham")
+markers_SCIvsham <- markers_SCIvsham %>% filter(p_val_adj <= 0.05)
+markers_SCIvsham <- mutate(markers_SCIvsham, direction = ifelse(avg_log2FC > 0, "up", "down"))
+markers_SCIvsham$gene <- rownames(markers_SCIvsham)
+write.table(markers_SCIvsham, file = paste0(outdir, "markers_AllSciVsham.txt"), sep = "\t", quote = FALSE, col.names = NA)
+markers_SCIvsham_top10 <- markers_SCIvsham %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_SCIvsham_top10, file = paste0(outdir, "markers_AllSciVsham_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+markers_SCIvsham_top100 <- markers_SCIvsham %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_SCIvsham_top100, file = paste0(outdir, "markers_AllSciVsham_top100.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# Analysis 1b: blood_naive vs blood_SCI (IVIG + veh)
+
+```{r}
+# blood_naive vs blood_SCI (IVIG + veh)
+Idents(df) <- "tissueinjury"
+markers_SCIvnaive <- FindMarkers(df, min.pct = 0.25, logfc.threshold = 0.25, ident.1 = "blood_SCI", ident.2 = "blood_naive")
+markers_SCIvnaive <- markers_SCIvnaive %>% filter(p_val_adj <= 0.05)
+markers_SCIvnaive <- mutate(markers_SCIvnaive, direction = ifelse(avg_log2FC > 0, "up", "down"))
+markers_SCIvnaive$gene <- rownames(markers_SCIvnaive)
+write.table(markers_SCIvnaive, file = paste0(outdir, "markers_AllSciVnaive.txt"), sep = "\t", quote = FALSE, col.names = NA)
+markers_SCIvnaive_top10 <- markers_SCIvnaive %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_SCIvnaive_top10, file = paste0(outdir, "markers_AllSciVnaive_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+markers_SCIvnaive_top100 <- markers_SCIvnaive %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_SCIvnaive_top100, file = paste0(outdir, "markers_AllSciVnaive_top100.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# Analysis 2a: SCI-blood vs (sham + naive)
+
+```{r}
+# blood_SCI_veh vs blood_ShamNv
+Idents(df) <- "mergeNvSham"
+markers_vehVSshnv <- FindMarkers(df, min.pct = 0.25, logfc.threshold = 0.25, ident.1 = "blood_SCI_veh", ident.2 = "blood_ShamNv")
+markers_vehVSshnv <- markers_vehVSshnv %>% filter(p_val_adj <= 0.05)
+markers_vehVSshnv <- mutate(markers_vehVSshnv, direction = ifelse(avg_log2FC > 0, "up", "down"))
+markers_vehVSshnv$gene <- rownames(markers_vehVSshnv)
+write.table(markers_vehVSshnv, file = paste0(outdir, "markers_SCIvehVSshnv.txt"), sep = "\t", quote = FALSE, col.names = NA)
+markers_vehVSshnv_top10 <- markers_vehVSshnv %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_vehVSshnv_top10, file = paste0(outdir, "markers_SCIvehVSshnv_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+markers_vehVSshnv_top100 <- markers_vehVSshnv %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_vehVSshnv_top100, file = paste0(outdir, "markers_SCIvehVSshnv_top100.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# Analysis 2b: SCI-blood-ivig vs (sham + naive)
+
+```{r}
+# blood_SCI_ivig vs blood_ShamNv
+Idents(df) <- "mergeNvSham"
+markers_ivigVSshnv <- FindMarkers(df, min.pct = 0.25, logfc.threshold = 0.25, ident.1 = "blood_SCI_ivig", ident.2 = "blood_ShamNv")
+markers_ivigVSshnv <- markers_ivigVSshnv %>% filter(p_val_adj <= 0.05)
+markers_ivigVSshnv <- mutate(markers_ivigVSshnv, direction = ifelse(avg_log2FC > 0, "up", "down"))
+markers_ivigVSshnv$gene <- rownames(markers_ivigVSshnv)
+write.table(markers_ivigVSshnv, file = paste0(outdir, "markers_SCIivigVSshnv.txt"), sep = "\t", quote = FALSE, col.names = NA)
+markers_ivigVSshnv_top10 <- markers_ivigVSshnv %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_ivigVSshnv_top10, file = paste0(outdir, "markers_SCIivigVSshnv_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+markers_ivigVSshnv_top100 <- markers_ivigVSshnv %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_ivigVSshnv_top100, file = paste0(outdir, "markers_SCIivigVSshnv_top100.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# Remove Rb/Mt genes
+
+SCI-blood vs (sham + naive)
+
+```{r}
+# Remove ribosomal and mitochondrial genes
+sink(paste0(outdir, "NbrRbMt.txt"))
+print("# Rb/Mt in IVIG+SCI vs sham")
+length(grep("^MT-|^RPS|^RPL", markers_SCIvsham$gene))
+print("# Rb/Mt in IVIG+SCI vs naive")
+length(grep("^MT-|^RPS|^RPL", markers_SCIvnaive$gene))
+print("# Rb/Mt in veh vs naive+sham")
+length(grep("^MT-|^RPS|^RPL", markers_vehVSshnv$gene))
+print("# Rb/Mt in ivig vs naive+sham")
+length(grep("^MT-|^RPS|^RPL", markers_ivigVSshnv$gene))
+sink()
+
+
+markers_SCIvsham_filt <- markers_SCIvsham[grep("^MT-|^RPS|^RPL", markers_SCIvsham$gene, invert = TRUE),]
+write.table(markers_SCIvsham_filt, file = paste0(outdir, "markers_SCIvsham", "_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_SCIvnaive_filt <- markers_SCIvnaive[grep("^MT-|^RPS|^RPL", markers_SCIvnaive$gene, invert = TRUE),]
+write.table(markers_SCIvnaive_filt, file = paste0(outdir, "markers_SCIvnaive", "_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_vehVSshnv_filt <- markers_vehVSshnv[grep("^MT-|^RPS|^RPL", markers_vehVSshnv$gene, invert = TRUE),]
+write.table(markers_vehVSshnv_filt, file = paste0(outdir, "markers_vehVSshnv", "_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_ivigVSshnv_filt <- markers_ivigVSshnv[grep("^MT-|^RPS|^RPL", markers_ivigVSshnv$gene, invert = TRUE),]
+write.table(markers_ivigVSshnv_filt, file = paste0(outdir, "markers_ivigVSshnv", "_RemoveRbMt.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+# top 10
+markers_SCIvsham_filt_top10 <- markers_SCIvsham_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_SCIvsham_filt_top10, file = paste0(outdir, "markers_SCIvsham", "_RemoveRbMt_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_SCIvnaive_filt_top10 <- markers_SCIvnaive_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_SCIvnaive_filt_top10, file = paste0(outdir, "markers_SCIvnaive", "_RemoveRbMt_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_vehVSshnv_filt_top10 <- markers_vehVSshnv_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_vehVSshnv_filt_top10, file = paste0(outdir, "markers_vehVSshnv", "_RemoveRbMt_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_ivigVSshnv_filt_top10 <- markers_ivigVSshnv_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 10)
+write.table(markers_ivigVSshnv_filt_top10, file = paste0(outdir, "markers_ivigVSshnv", "_RemoveRbMt_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+# top 100
+markers_SCIvsham_filt_top100 <- markers_SCIvsham_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_SCIvsham_filt_top10, file = paste0(outdir, "markers_SCIvsham", "_RemoveRbMt_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_SCIvnaive_filt_top100 <- markers_SCIvnaive_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_SCIvnaive_filt_top10, file = paste0(outdir, "markers_SCIvnaive", "_RemoveRbMt_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_vehVSshnv_filt_top100 <- markers_vehVSshnv_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_vehVSshnv_filt_top10, file = paste0(outdir, "markers_vehVSshnv", "_RemoveRbMt_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+markers_ivigVSshnv_filt_top100 <- markers_ivigVSshnv_filt %>% group_by(direction) %>% slice_max(order_by = avg_log2FC, n = 100)
+write.table(markers_ivigVSshnv_filt_top10, file = paste0(outdir, "markers_ivigVSshnv", "_RemoveRbMt_top10.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# how many hits?
+
+```{r}
+nrow(markers_SCIvsham_filt)
+
+nrow(markers_SCIvnaive_filt)
+
+nrow(markers_vehVSshnv_filt)
+
+nrow(markers_ivigVSshnv_filt)
+```
+

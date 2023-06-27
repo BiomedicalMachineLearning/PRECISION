@@ -1,0 +1,155 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+
+```{r}
+DEGs2096 <- read.csv("/scripts/16_CompareKyritsis/Paper/FromEmail/2096 differentially expressed SCI genes.csv")
+allDEGs <- read.csv("/scripts/16_CompareKyritsis/Paper/FromEmail/differential_gene_expression_all_contrasts.csv")
+outdir <- "/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/"
+```
+
+* HC vs TC = 72 + 160 + 20 + 138 = 390
+* HC vs SCI = 1424 + 160 + 20 + 424 = 2028 
+* TC vs SCI = 248 + 138 + 20 + 424 = 830
+
+# Step 1: Split up the gene lists so I can recreate the venn
+
+```{r}
+# is it the column "TC.HC.adj.P.Val"?
+nrow(allDEGs %>% filter(TC.HC.adj.P.Val <= 0.05) %>% filter(logFC > 1 | logFC < -1)) #expect: 390 get: 390
+nrow(allDEGs %>% filter(SCI.HC.adj.P.Val <= 0.05) %>% filter(logFC.1 > 1 | logFC.1 < -1)) #expect: 2028 get: 2028
+nrow(allDEGs %>% filter(SCI.TC.adj.P.Val <= 0.05) %>% filter(logFC.2 > 1 | logFC.2 < -1)) #expect: 831 get: 830
+```
+
+```{r}
+TC_HC <- allDEGs %>% filter(TC.HC.adj.P.Val <= 0.05) %>% filter(logFC > 1 | logFC < -1)
+SCI_HC <- allDEGs %>% filter(SCI.HC.adj.P.Val <= 0.05) %>% filter(logFC.1 > 1 | logFC.1 < -1)
+SCI_TC <- allDEGs %>% filter(SCI.TC.adj.P.Val <= 0.05) %>% filter(logFC.2 > 1 | logFC.2 < -1)
+```
+
+
+# split into upreg vs downreg
+
+```{r}
+TC_HC_up <- TC_HC %>% filter(logFC > 0)
+TC_HC_down <- TC_HC %>% filter(logFC < 0)
+
+SCI_HC_up <- SCI_HC %>% filter(logFC > 0)
+SCI_HC_down <- SCI_HC %>% filter(logFC < 0)
+
+SCI_TC_up <- SCI_TC %>% filter(logFC > 0)
+SCI_TC_down <- SCI_TC %>% filter(logFC < 0)
+```
+
+```{r}
+write.table(TC_HC_up, file = paste0(outdir, "kyritsis_HCvsTC_up.txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(TC_HC_down, file = paste0(outdir, "kyritsis_HCvsTC_down.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+write.table(SCI_HC_up, file = paste0(outdir, "kyritsis_HCvsSCI_up.txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(TC_HC_down, file = paste0(outdir, "kyritsis_HCvsSCI_down.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+write.table(SCI_TC_up, file = paste0(outdir, "kyritsis_TCvsSCI_up.txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(SCI_TC_down, file = paste0(outdir, "kyritsis_TCvsSCI_down.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# now look at the 2096 genes
+
+* A total of 1025 SCI genes upregulated in SCI.TC and SCI.HC but not TC.HC (265 key genes overlap)
+* A total of 1071 SCI genes upregulated in SCI.TC and SCI.HC but not TC.HC (159)
+
+```{r}
+# all genes (as in the paper)
+all2096 <- setdiff((union(SCI_HC$Feature, SCI_TC$Feature)), TC_HC$Feature)
+
+# split by up and downregulated
+upreg_2096 <- setdiff((union(SCI_HC_up$Feature, SCI_TC_up$Feature)), TC_HC_up$Feature)
+downreg_2096 <- setdiff((union(SCI_HC_down$Feature, SCI_TC_down$Feature)), TC_HC_down$Feature)
+
+# get the subset that is in both SCI_HC and SCI_TC
+upreg_2096_key <- setdiff((intersect(SCI_HC_up$Feature, SCI_TC_up$Feature)), TC_HC_up$Feature)
+downreg_2096_key <- setdiff((intersect(SCI_HC_down$Feature, SCI_TC_down$Feature)), TC_HC_down$Feature)
+```
+
+```{r}
+write.table(as.data.frame(all2096), file = paste0(outdir, "kyritsis_all2096.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+write.table(as.data.frame(upreg_2096), file = paste0(outdir, "kyritsis_2096_upreg.txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(as.data.frame(downreg_2096), file = paste0(outdir, "kyritsis_2096_downreg.txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+write.table(as.data.frame(upreg_2096_key), file = paste0(outdir, "kyritsis_2096_upreg_KeyOverlap.txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(as.data.frame(downreg_2096_key), file = paste0(outdir, "kyritsis_2096_downreg_KeyOverlap.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# what if I make a more streamlined list, i.e. the genes with the top FC
+
+Also filter to require that the genes be included in our dataset
+
+```{r}
+inhouse <- readRDS("/scripts/17_MetacellVehicleOnly/vehicle/11.1a_ReplotUMAP/out_obj/ReplotUMAP_Seurat.RDS")
+```
+
+```{r}
+ProcessGeneList <- function(mylist) {
+  mylist_f <- mylist[mylist %in% rownames(inhouse)] #only keep if in inhouse data
+  mylist_ft <- allDEGs[allDEGs$Feature %in% mylist_f,] #get the full DE table
+  # extract the separate sample data and filter to only keep the significant hits
+  mylist_ft_SCI.HC <- mylist_ft[c("Feature", "logFC.1", "SCI.HC.adj.P.Val")] %>%
+    filter(SCI.HC.adj.P.Val <= 0.05) %>%
+    filter(logFC.1 > 1 | logFC.1 < -1) #extract SCI vs HC data
+  colnames(mylist_ft_SCI.HC) <- c("Feature", "logFC", "adjP")
+  mylist_ft_SCI.TC <- mylist_ft[c("Feature", "logFC.2", "SCI.TC.adj.P.Val")] %>%
+    filter(SCI.TC.adj.P.Val <= 0.05) %>%
+    filter(logFC.2 > 1 | logFC.2 < -1) #extract SCI vs TC data
+  colnames(mylist_ft_SCI.TC) <- c("Feature", "logFC", "adjP")
+  # make separate lists of the up and downregulated genes, and re-merge between samples
+  mylist_ft_SCI.HC$comparison <- "SCI.HC"
+  mylist_ft_SCI.TC$comparison <- "SCI.TC"
+  upreg <- rbind((mylist_ft_SCI.HC %>% filter(logFC > 0)), (mylist_ft_SCI.TC %>% filter(logFC > 0)))
+  downreg <- rbind((mylist_ft_SCI.HC %>% filter(logFC < 0)), (mylist_ft_SCI.TC %>% filter(logFC < 0)))
+  # remove duplicates
+  upreg_f <- upreg %>% arrange(logFC)
+  upreg_f <- upreg_f[!duplicated(upreg_f$Feature),]
+  downreg_f <- downreg %>% arrange(logFC)
+  downreg_f <- downreg_f[!duplicated(downreg_f$Feature),]
+  # select top N per direction
+  upreg_f$direction <- "up"
+  upreg_top50 <- upreg_f %>% arrange(-(logFC)) %>% dplyr::slice(1:50, with_ties = FALSE)
+  downreg_f$direction <- "down"
+  downreg_top50 <- downreg_f %>% arrange(-(logFC)) %>% dplyr::slice(1:50, with_ties = FALSE)
+  all <- rbind(upreg_top50, downreg_top50)
+  return(all)
+}
+```
+
+```{r}
+top50_2096 <- ProcessGeneList(all2096)
+write.table(top50_2096, file = paste0(outdir, "kyritsis_2096_top50.txt"), sep = "\t", quote = FALSE, col.names = NA)
+top50_key <- ProcessGeneList(c(upreg_2096_key, downreg_2096_key))
+write.table(top50_key, file = paste0(outdir, "kyritsis_keygenes_top50.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+
+
+```{r}
+# also pull the 2096 genes
+#TC_HC_up[TC_HC_up$Feature %in% DEGs2096$Feature,] #no hits
+#TC_HC_down[TC_HC_down$Feature %in% DEGs2096$Feature,] #no hits
+
+#SCI_HC_up_2096 <- SCI_HC_up[SCI_HC_up$Feature %in% DEGs2096$Feature,] #967
+#SCI_HC_down_2096 <- SCI_HC_down[SCI_HC_down$Feature %in% DEGs2096$Feature,] #881 hits
+
+#SCI_TC_up_2096 <- SCI_TC_up[SCI_TC_up$Feature %in% DEGs2096$Feature,] #323 hits
+#SCI_TC_down_2096 <- SCI_TC_down[SCI_TC_down$Feature %in% DEGs2096$Feature,] #349 hits
+
+# all 2096 up and down
+#all2096_up <- as.data.frame(unique(c(SCI_HC_up_2096$Feature, SCI_TC_up_2096$Feature)))
+#all2096_down <- as.data.frame(unique(c(SCI_HC_down_2096$Feature, SCI_TC_down_2096$Feature)))
+```
+
+

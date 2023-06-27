@@ -1,0 +1,316 @@
+---
+title: "Seurat Heatmaps"
+output: html_notebook
+---
+
+# Load libraries
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(pheatmap)
+library(metacell)
+library(RColorBrewer)
+library(ComplexHeatmap)
+library(ggplot2)
+```
+
+# User input
+
+```{r}
+seurat_markers.tab <- read.delim("/scripts/13b_ProcessForGO/Samplewise/outdir/4.4_vehVSivig_blood_Markers_dropRbMt.txt")
+sampleID <- "4.4"
+my_ident1 <- "blood_SCI_ivig" 
+my_ident2 <- "blood_SCI_veh"
+
+
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+
+outdir <- "/scripts/0_Figures/Fig_DEGs_Heatmap/Samplewise/outdir/"
+
+clusterID <- "integrated_snn_res.0.4"
+
+desiredClusterOrder <- c("0", "1", "3", "4", "5", "2", "8", "6", "7", "9", "10")
+```
+
+```{r}
+# filter markers to top 10
+seurat_markers.tab <- seurat_markers.tab %>% group_by(cluster) %>% slice_max(order_by = avg_log2FC, n = 10)
+```
+
+
+```{r}
+ann_colors = list(
+    sample = c(`blood_SCI_veh` = "#3C0D03",
+                   `blood_SCI_ivig` = "#99280A",
+                    `blood_sham_veh` = "#EC9543",
+                   `blood_naive_veh` = "#F3C34D",
+                   `cord_SCI_veh` = "#0A3351",
+                   `cord_SCI_ivig` = "#3274A3"),
+    cluster = c(
+    `0` = "gold", #CD4
+            `1` = "orangered", #Treg
+            `3` = "deeppink2", #naive_CD8
+            `4` = "darkorchid4", #mem_CD8
+            `5` = "chocolate1", #naive_CD4
+            # B cells
+            `2` = "peachpuff4", #naive_memB 1+2 (1)
+            `8` = "peru", #naive_memB 1+2 (2)
+            # NKT
+            `6` = "limegreen", #NKT_DC
+            `7` = "forestgreen", #NKT_B & NKT_DC
+            # other
+            `9` = "darkturquoise", #basophil
+            `10` = "navyblue"
+    ))
+```
+
+# Get everything set up correctly
+
+```{r}
+Idents(df) <- clusterID
+```
+
+# Make a list of the expression values for your markers of interest (Seurat + Metacell + clusterIDs) and re-order based on their association with each cluster
+
+```{r}
+seurat_markers.tab2 <- seurat_markers.tab[,c("cluster", "gene")]
+seurat_markers.tab2$cluster <- factor(seurat_markers.tab2$cluster, levels = c("down", "up"))
+# re-order clusters to group clusters the way you want
+#seurat_markers.tab2$cluster <- factor(seurat_markers.tab2$cluster, levels = desiredClusterOrder)
+seurat_markers.tab2 <- (seurat_markers.tab2[order(seurat_markers.tab2$cluster),,drop = FALSE])
+seurat_markers <- as.vector(seurat_markers.tab2$gene)
+```
+
+```{r}
+# overlapmarkers <- intersect(mc_markers, seurat_markers)
+# overlapmarkers <- overlapmarkers[order(match(overlapmarkers,seurat_markers))]
+# # add in additional key markers that define the clusters (not added again if already in the list)
+# extramarkers <- extramarkers[which(!(extramarkers %in% overlapmarkers))]
+# # combine to add in these markers
+# overlapmarkers <- c(overlapmarkers, extramarkers) #these are key markers that are not already in the list
+overlapmarkers <- seurat_markers
+```
+
+# Scale the data, and make a count matrix for the heatmap
+
+After running my Seurat pipeline, there is no scaledata slot, so I need to re-run scaledata for RNA, as per: https://github.com/satijalab/seurat/issues/2960
+Andrew Butler: "Here the DoHeatmap function is trying to pull values from the scale.data slot of the RNA assay. However, it doesn't look like you ran ScaleData on that assay and thus the slot is empty. If you want to plot a heatmap of the scaled RNA data, you only need to run ScaleData before making that DoHeatmap call (not the other functions you list)."
+
+Normally when scaling the data, you'd either scale all genes or just the 2000 variable genes. Here, we only scale the overlap markers to save time and make sure all our genes of interest get scaled
+
+```{r}
+DefaultAssay(df) <- "RNA"
+df <- ScaleData(df, features = overlapmarkers)
+```
+
+```{r}
+countdata_v2 <- df@assays$RNA@scale.data[which(rownames(df@assays$RNA@scale.data) %in% overlapmarkers),]
+countdata_v2 <- countdata_v2[overlapmarkers,rownames(as.data.frame(Idents(df)))] #reorder to match the plot made by 
+# reorder columns based on the cell type, and thus re-order genes too so it looks nice
+# order the cells by category
+# myorder <- as.data.frame(Idents(df))
+# colnames(myorder) <- c(clusterID)
+# myorder$integrated_snn_res.0.4 <- factor(myorder$integrated_snn_res.0.4, levels = desiredClusterOrder)
+# myorder <- myorder[order(myorder$integrated_snn_res.0.4),,drop = FALSE]
+
+# countdata_v3 <- countdata_v2[overlapmarkers,rownames(myorder)]
+```
+
+```{r}
+myorder <- as.data.frame(Idents(df))
+# add in the sample information
+sample_meta <- as.data.frame(df$sample)
+sample_meta <- sample_meta[rownames(myorder), , drop = FALSE] #order
+# merge them together
+myorder <- cbind(myorder, sample_meta)
+colnames(myorder) <- c(clusterID, "sample")
+myorder$integrated_snn_res.0.4 <- factor(myorder$integrated_snn_res.0.4, levels = desiredClusterOrder)
+myorder$sample <- factor(myorder$sample, levels = c("blood_naive_veh","blood_sham_veh","blood_SCI_veh",
+                                                                   "blood_SCI_ivig", "cord_SCI_veh", "cord_SCI_ivig"))
+# order by cluster then by sample
+myorder <- myorder[order(myorder[,"integrated_snn_res.0.4"], myorder[,"sample"] ),]
+# order by sample then by cluster
+myorder <- myorder[order(myorder[,"sample"], myorder[,"integrated_snn_res.0.4"] ),]
+countdata_v3 <- countdata_v2[overlapmarkers,rownames(myorder)]
+```
+
+
+# Make annotations
+
+```{r}
+annotations <- df[[c(clusterID, "sample")]]
+# make sure the annotations are in the right order
+annotations <- annotations[rownames(myorder),]
+colnames(annotations) <- c("cluster", "sample")
+
+# specify ComplexHeatmap annotation objects
+ann_clust = HeatmapAnnotation(clust = annotations$cluster,
+                              col = list(clust = ann_colors$cluster),
+                              #simple_anno_size = unit(1, "cm"), #height of annotation bar
+                              show_legend = TRUE,
+                              show_annotation_name = FALSE)
+
+ann_time = HeatmapAnnotation(sample = annotations$sample,
+                             col = list(sample = ann_colors$sample),
+                             #simple_anno_size = unit(1, "cm"), #height of annotation bar
+                             show_legend = TRUE,
+                             show_annotation_name = FALSE,
+                             annotation_legend_param = list(title = NULL))
+```
+
+# plot a histogram to help choose the colour scale
+
+```{r}
+min(countdata_v3)
+max(countdata_v3)
+hist(countdata_v3)
+```
+
+# make heatmap
+
+```{r}
+CellPalette = circlize::colorRamp2(c(min(countdata_v3), -2.5, -1.25, 0, 1.25, 2.5, max(countdata_v3)), c("blue", "blue", "lightskyblue", "white", "orange", "red2", "red2"))
+
+ht_maxOutOutliers_fullscale <- Heatmap(countdata_v3,
+        cluster_rows = FALSE, cluster_columns = FALSE,
+        show_column_names = FALSE,
+        col = CellPalette,
+        row_names_gp = gpar(fontsize = 7),
+        row_order = overlapmarkers, column_order = rownames(myorder),
+        bottom_annotation = ann_clust,
+        top_annotation = ann_time,
+        # legend
+         heatmap_legend_param = list(title = NULL,
+                                     labels_gp = gpar(fontsize = 8),
+                                     direction = "horizontal", nrow=1),
+        # split up clusters (cols) and additional genes (rows)
+        column_split = myorder$sample, column_title = NULL,
+        column_gap = unit(0.5, "mm"),
+        use_raster = TRUE, raster_quality = 1,
+        width = unit(7, "cm") #based on current figure
+        )
+
+pdf(paste0(outdir, sampleID, "_DEGs_heatmap_allcells.pdf"), height = 12)
+draw(ht_maxOutOutliers_fullscale, annotation_legend_side = "bottom", heatmap_legend_side = "bottom")
+dev.off()
+```
+
+# save the legend as a separate file
+
+```{r}
+# lgnd = Legend(names(ann_colors$cluster), legend_gp = gpar(fill = ann_colors$cluster))
+# pdf(paste0(outdir, "ClusterMarker_ClustLegend.pdf"))
+# draw(lgnd)
+# dev.off()
+# 
+# lgnd = Legend(names(ann_colors$sample), legend_gp = gpar(fill = ann_colors$sample))
+# pdf(paste0(outdir, "SampleMarker_ClustLegend.pdf"))
+# draw(lgnd)
+# dev.off()
+```
+
+# Plot the same thing but only use cells that were included in the DE analysis
+
+```{r}
+keep <- names(which(df$sample == my_ident1 | df$sample == my_ident2))
+df_filt <- subset(df, cells = keep)
+```
+
+```{r}
+DefaultAssay(df_filt) <- "RNA"
+df_filt <- ScaleData(df_filt, features = overlapmarkers)
+```
+
+```{r}
+countdata_v2 <- df_filt@assays$RNA@scale.data[which(rownames(df_filt@assays$RNA@scale.data) %in% overlapmarkers),]
+countdata_v2 <- countdata_v2[overlapmarkers,rownames(as.data.frame(Idents(df_filt)))] #reorder to match the plot made by 
+# reorder columns based on the cell type, and thus re-order genes too so it looks nice
+# order the cells by category
+# myorder <- as.data.frame(Idents(df))
+# colnames(myorder) <- c(clusterID)
+# myorder$integrated_snn_res.0.4 <- factor(myorder$integrated_snn_res.0.4, levels = desiredClusterOrder)
+# myorder <- myorder[order(myorder$integrated_snn_res.0.4),,drop = FALSE]
+
+# countdata_v3 <- countdata_v2[overlapmarkers,rownames(myorder)]
+```
+
+```{r}
+# order by cluster then sample
+myorder <- as.data.frame(Idents(df_filt))
+# add in the sample information
+sample_meta <- as.data.frame(df_filt$sample)
+sample_meta <- sample_meta[rownames(myorder), , drop = FALSE] #order
+# merge them together
+myorder <- cbind(myorder, sample_meta)
+colnames(myorder) <- c(clusterID, "sample")
+myorder$integrated_snn_res.0.4 <- factor(myorder$integrated_snn_res.0.4, levels = desiredClusterOrder)
+myorder$sample <- factor(myorder$sample, levels = c("blood_naive_veh","blood_sham_veh","blood_SCI_veh",
+                                                                   "blood_SCI_ivig", "cord_SCI_veh", "cord_SCI_ivig"))
+# order by cluster then sample
+#myorder <- myorder[order(myorder[,"integrated_snn_res.0.4"], myorder[,"sample"] ),]
+# order by sample then cluster
+myorder <- myorder[order(myorder[,"sample"], myorder[,"integrated_snn_res.0.4"] ),]
+countdata_v3 <- countdata_v2[overlapmarkers,rownames(myorder)]
+```
+
+
+# Make annotations
+
+```{r}
+annotations <- df_filt[[c(clusterID, "sample")]]
+# make sure the annotations are in the right order
+annotations <- annotations[rownames(myorder),]
+colnames(annotations) <- c("cluster", "sample")
+
+# specify ComplexHeatmap annotation objects
+ann_clust = HeatmapAnnotation(clust = annotations$cluster,
+                              col = list(clust = ann_colors$cluster),
+                              #simple_anno_size = unit(1, "cm"), #height of annotation bar
+                              show_legend = TRUE,
+                              show_annotation_name = FALSE)
+
+ann_time = HeatmapAnnotation(sample = annotations$sample,
+                             col = list(sample = ann_colors$sample),
+                             #simple_anno_size = unit(1, "cm"), #height of annotation bar
+                             show_legend = TRUE,
+                             show_annotation_name = FALSE,
+                             annotation_legend_param = list(title = NULL))
+```
+
+# plot a histogram to help choose the colour scale
+
+```{r}
+min(countdata_v3)
+max(countdata_v3)
+hist(countdata_v3)
+```
+
+# make heatmap
+
+```{r}
+CellPalette = circlize::colorRamp2(c(min(countdata_v3), -2.5, -1.25, 0, 1.25, 2.5, max(countdata_v3)), c("blue", "blue", "lightskyblue", "white", "orange", "red2", "red2"))
+
+ht_maxOutOutliers_fullscale <- Heatmap(countdata_v3,
+        cluster_rows = FALSE, cluster_columns = FALSE,
+        show_column_names = FALSE,
+        col = CellPalette,
+        row_names_gp = gpar(fontsize = 7),
+        row_order = overlapmarkers, column_order = rownames(myorder),
+        bottom_annotation = ann_clust,
+        top_annotation = ann_time,
+        # legend
+         heatmap_legend_param = list(title = NULL,
+                                     labels_gp = gpar(fontsize = 8),
+                                     direction = "horizontal", nrow=1),
+        # split up clusters (cols) and additional genes (rows)
+        column_split = myorder$sample, column_title = NULL,
+        column_gap = unit(0.5, "mm"),
+        use_raster = TRUE, raster_quality = 1,
+        width = unit(7, "cm") #based on current figure
+        )
+
+pdf(paste0(outdir, sampleID, "_DEGs_heatmap_relevantCells.pdf"), height = 12)
+draw(ht_maxOutOutliers_fullscale, annotation_legend_side = "bottom", heatmap_legend_side = "bottom")
+dev.off()
+```

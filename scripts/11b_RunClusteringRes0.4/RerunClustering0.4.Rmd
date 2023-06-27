@@ -1,0 +1,31 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+out_data <- "/scripts/11b_RunClusteringRes0.4/out_data/"
+out_obj <- "/scripts/11b_RunClusteringRes0.4/out_obj/"
+
+df <- readRDS("/scripts/10c_integrated_clustering/out_obj/allintegratedClustered_Seurat.RDS")
+```
+
+# Recluster at resolution 0.4
+
+```{r}
+df <- FindClusters(df, resolution = 0.4)
+DimPlot(df, group.by = "integrated_snn_res.0.4", label = TRUE)
+ggsave(filename = paste0(out_data, "UMAP_ClustersRes0.4.pdf"), width = 6, height = 5)
+```
+
+```{r}
+saveRDS(df, file = paste0(out_obj, "allintegratedClustered_Seurat2.RDS"))
+```
+

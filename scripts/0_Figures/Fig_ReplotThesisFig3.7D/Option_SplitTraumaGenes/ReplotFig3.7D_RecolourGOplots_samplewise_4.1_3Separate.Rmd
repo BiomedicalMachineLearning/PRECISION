@@ -1,0 +1,195 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Figure 3.7. Comparison of blood from naïve, sham and SCI humanised mice at 7dpi. (D) Top 10 gene ontology (GO) terms enriched for each comparison. Colour represents –log10 adjusted p-value (blue is down, red is upregulated); dot size represents ratio of genes contributing to the GO term.
+
+Task: 
+•	Remove GO terms that are regulated in the same direction in the sham_v_naive and SCI_v_naive comparisons (we will end up with a “trauma induced” GO plot). Re-order plot so it goes left-right sham_v_naive, sci_naive, sci_v_sham.
+•	Plot remaining GO terms (these are “SCI-induced”) Re-order plot so it goes left-right sham_v_naive, sci_naive, sci_v_sham.
+
+highlighted go term shows this term is down in both sci v naive and sham v naive and therefore is just a trauma response and should be remvoed from this plot
+11:35
+so he wanted to take all terms that overlap like that out of this plot, and put them into their own 'trauma induced' plot
+
+
+```{r message=FALSE, warning=FALSE}
+# load packages
+library(presto)
+library(clusterProfiler)
+library(ComplexHeatmap)
+library(dplyr)
+library(org.Hs.eg.db)
+#library(org.Hs.eg.db)
+library(tidyverse)
+library(ggpubr)
+library(stringr)
+library(aplot)
+library(patchwork)
+```
+
+
+```{r}
+outdir <- "/scripts/0_Figures/Fig_ReplotThesisFig3.7D/outdir/"
+
+sampleID <- "4.1_All3Separate"
+
+ck_filt_simple <- readRDS("/scripts/14_GO/Samplewise_AllGenes_RemoveRbMt/outdir_4.1_3ComparisonsSeparate/clust_4.1_separate_top100GO_FiltSimp.RDS")
+```
+
+```{r}
+ck_filt_simple@compareClusterResult$sample <- sampleID
+ck_filt_simple@compareClusterResult$direction <- gsub(".*_", "", ck_filt_simple@compareClusterResult$Cluster)
+ck_filt_simple@compareClusterResult$comparison <- gsub("_.*", "", ck_filt_simple@compareClusterResult$Cluster)
+```
+
+# filter GO data to remove GO terms regulated in the same direction in sham vs naive and sham 
+
+```{r}
+GOdata <- ck_filt_simple@compareClusterResult
+GOdata_up <- GOdata %>% filter(direction == "up")
+GOdata_down <- GOdata %>% filter(direction == "down")
+
+# # filter 1: remove anything that is in sham vs naive, and only plot SCI vs naive and SCI vs sham (in the same direction)
+# GOup_remove <- GOdata_up %>% filter(comparison == "shamVnaive") %>% pull(Description)
+# GOdown_remove <- GOdata_down %>% filter(comparison == "shamVnaive") %>% pull(Description)
+# # remove GO terms that show up in the sham vs naive (which also has the effect of removing the sham vs naive)
+# GOup_filterNonSCI <- GOdata_up[!(GOdata_up$Description %in% GOup_remove),]
+# GOdown_filterNonSCI <- GOdata_down[!(GOdata_down$Description %in% GOdown_remove),]
+# #merge
+# GOdata_filterNonSCI <- rbind(GOup_filterNonSCI, GOdown_filterNonSCI)
+
+# filter 2: remove any overlaps between SCI vs naive and sham vs naive (in the same direction)
+# in this case, this is effectively the same as removing any overlap with SCIvsham and shamVnaive too
+GOup_removeNv <- intersect((GOdata_up %>% filter(comparison == "shamVnaive") %>% pull(Description)), (GOdata_up %>% filter(comparison == "SCIvnaive") %>% pull(Description)))
+GOdown_removeNv <- intersect((GOdata_down %>% filter(comparison == "shamVnaive") %>% pull(Description)), (GOdata_down %>% filter(comparison == "SCIvnaive") %>% pull(Description)))
+# remove GO terms that show up in the sham vs naive (which also has the effect of removing the sham vs naive)
+GOup_filterNv <- GOdata_up[!(GOdata_up$Description %in% GOup_removeNv),]
+GOdown_filterNv <- GOdata_down[!(GOdata_down$Description %in% GOdown_removeNv),]
+#merge
+GOdata_filterNv <- rbind(GOup_filterNv, GOdown_filterNv)
+
+# I also need to make a heatmap specifically of the terms I removed
+# keep GO terms that show up in the sham vs naive (which also has the effect of removing the sham vs naive)
+GOup_trauma <- GOdata_up[(GOdata_up$Description %in% GOup_removeNv),]
+GOdown_trauma <- GOdata_down[(GOdata_down$Description %in% GOdown_removeNv),]
+#merge
+GOdata_trauma <- rbind(GOup_trauma, GOdown_trauma)
+```
+
+```{r}
+MakeDotplots <- function(myGOdata, n, width, height, sampleID) {
+  # where n = number of genes to pick
+  analysisID <- paste0("top", n, "_", sampleID)
+  GOdata <- myGOdata
+  
+  # get the top N of each group
+  GOdata <- mutate(GOdata, ID_desc = paste0(ID, ": ", Description))
+  
+  topN <- GOdata %>%
+    group_by(Cluster) %>%
+    arrange(p.adjust) %>%
+    dplyr::slice(1:n)
+  topNuniq <- unique(topN$Description)
+  topN_allhits <- GOdata[which(GOdata$Description %in% topNuniq),]
+  
+  # prepare the data table
+  table <- topN_allhits[,c(1,2,3,4,5,7,11, 12, 13)]
+  
+  # add in the various ratios to control dot size
+  table <- tidyr::separate(data = table, col = GeneRatio, into = c("k_GOIinSet", "n_GOI"), sep = "\\/")
+  table <- tidyr::separate(data = table, col = BgRatio, into = c("M_Set", "N_background"), sep = "\\/")
+  ## make numeric
+  table$k_GOIinSet <- as.numeric(table$k_GOIinSet)
+  table$n_GOI <- as.numeric(table$n_GOI)
+  table$M_Set <- as.numeric(table$M_Set)
+  table$N_background <- as.numeric(table$N_background)  
+  ## make a ratio
+  table <- mutate(table, GeneRatio = k_GOIinSet / n_GOI)
+  table <- mutate(table, Ratio_kM = k_GOIinSet / M_Set)
+  
+  # for the sake of visualisation, convert p-values to log10 and invert the numbers of the downregulated hits
+  #table <- mutate(table, direction = gsub(".*_","",Cluster))
+  #table$direction <- table$Cluster
+  table <- mutate(table, direction2 = ifelse(direction == "up", 1, -1))
+  table <- mutate(table, padjdir = -log10(p.adjust + 1e-6) * sign(direction2))
+
+  # # simplify the "traj_0_" cluster names to just the number to aid with the ordering/legend
+  # table <- mutate(table, Path = word(Cluster, 1, sep = "_"))
+  # table$Path <- as.factor(table$Path) # convert to factor data type
+  # table$Path <- factor(table$Path, levels = c("d1p2", "d1p3", "d1p11", "d3p3", "d7p0"))
+  # table <- table[order(table$Path),] #reorder
+ 
+   # work out which genes to plot and order them by path ID
+  table <- mutate(table, ID_desc = paste0(ID, ": ", Description))
+  markers <- table$Description %>% unique()
+  table$Description <- factor(table$Description, levels = rev(topNuniq))
+  
+  # add in the GO term to the name, optionally
+  markers_IDdesc <- table$ID_desc %>% unique()
+  topNuniq_IDdesc <- unique(topN$ID_desc)
+  table$ID_desc <- factor(table$ID_desc, levels = rev(topNuniq_IDdesc))
+  
+  # set levels on the comparisons and direction
+  table$comparison <- factor(table$comparison, levels = c("shamVnaive", "SCIvnaive", "SCIvsham"))
+  table$direction <- factor(table$direction, levels = c("up", "down"))
+  
+  # order the table rows by sample and then by direction and then by xxx and use this to set the levels (and get Y axis right)
+  table <- table[with(table, rev(order(GeneRatio))),]
+  table <- table[with(table, order(direction, comparison)),]
+  toorder_Desc <- table$Description[!duplicated(table$Description)]
+  toorder_ID_desc <- table$ID_desc[!duplicated(table$ID_desc)]
+  table$Description <- factor(table$Description, levels = rev(toorder_Desc))
+  table$ID_desc <- factor(table$ID_desc, levels = rev(toorder_ID_desc))
+
+  # add time category for  faceting
+  #table$time <- gsub("p.*_.*", "", table$Cluster)
+  
+  ## size is gene ratio, colour is up/downreg - this is the best one
+  # set colour scale - make it symmetrical, whatever value is (abs) larger
+  scaleend <- max(abs(max(table$padjdir)), abs(min(table$padjdir)))
+  
+  dotplot_grp_topN <- table %>% filter(Description %in% markers) %>% 
+    ggplot(aes(x=comparison, y = Description, color = padjdir, size = GeneRatio)) + 
+    geom_point(alpha = 0.8) +
+    scale_size_continuous(range = c(0.5, 4)) +
+    scale_color_gradientn(colours = c("blue", "lightskyblue", "white", "orange", "red"),
+                          limits = c(-scaleend, scaleend)) +
+                          # values = scales::rescale(c(min(table$padjdir),
+                          #                            ((abs(min(table$padjdir)))/2)*-1, 0, max(table$padjdir)/2, max(table$padjdir)))) +
+                            scale_y_discrete(position = "right", labels = function(x) str_trunc(x, width = 80, side = "center")) +
+                            theme_light(base_size = 10)
+  
+  pdf(paste0(outdir, sampleID, "_uniqueHits_dotplot_generatio+pval_", analysisID, ".pdf"), width = width, height = height)
+  #labels + dotplot_grp + plot_layout(ncol = 1, heights = c(0.9, 20))
+  print(dotplot_grp_topN)
+  dev.off()
+  
+  ## the same plot, but show the GO term names
+  dotplot_grp_topN_withGOlabels <- table %>% filter(Description %in% markers) %>% 
+    ggplot(aes(x=comparison, y = ID_desc, color = padjdir, size = GeneRatio)) + 
+    geom_point(alpha = 0.8) +
+    scale_size_continuous(range = c(0.5, 4)) +
+    scale_color_gradientn(colours = c("blue", "lightskyblue", "white", "orange", "red"),
+                          limits = c(-scaleend, scaleend)) +
+                          # values = scales::rescale(c(min(table$padjdir),
+                          #                            ((abs(min(table$padjdir)))/2)*-1, 0, max(table$padjdir)/2, max(table$padjdir)))) +
+                            
+    scale_y_discrete(position = "right", labels = function(x) str_trunc(x, width = 80, side = "center")) +
+    theme_light(base_size = 10)
+  
+  pdf(paste0(outdir, sampleID, "_uniqueHits_dotplot_generatio+pval_", analysisID, "_withGOlabels.pdf"), width = width, height = height)
+  #labels + dotplot_grp + plot_layout(ncol = 1, heights = c(0.9, 20))
+  print(dotplot_grp_topN_withGOlabels)
+  dev.off()
+}
+```
+
+```{r}
+#MakeDotplots(GOdata_filterNonSCI, 10, 7, 6, "filterNonSCI")
+MakeDotplots(GOdata_filterNv, 10, 7, 6, "filterNvOverlap")
+
+MakeDotplots(GOdata_trauma, 10, 7, 6, "GOdata_trauma")
+```
+

@@ -1,0 +1,143 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+inhouse <- readRDS("/scripts/17_MetacellVehicleOnly/vehicle/11.1a_ReplotUMAP/out_obj/ReplotUMAP_Seurat.RDS")
+Idents(inhouse) <- "clusters_wholedataset"
+DefaultAssay(inhouse) <- "RNA"
+outdir <- "/scripts/16_CompareKyritsis/3_DEGscore/4_OverlapWithDEGs/outdir/"
+
+
+# GOIs - Kyritsis
+allDEGs <- read.csv("/scripts/16_CompareKyritsis/Paper/FromEmail/differential_gene_expression_all_contrasts.csv")
+# GOIs - inhouse (from our analysis (4.1, blood SCI vs sham/naive) - samplewise)
+SCIvnaive <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvnaive_RemoveRbMt.txt")
+SCIvsSham <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvsham_RemoveRbMt.txt")
+shamvnaive <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_shamVnaive_RemoveRbMt.txt")
+```
+
+# Split the original Kyritsis list into upreg vs downreg
+
+```{r}
+TC_HC <- allDEGs %>% filter(TC.HC.adj.P.Val <= 0.05) %>% filter(logFC > 1 | logFC < -1)
+SCI_HC <- allDEGs %>% filter(SCI.HC.adj.P.Val <= 0.05) %>% filter(logFC.1 > 1 | logFC.1 < -1)
+SCI_TC <- allDEGs %>% filter(SCI.TC.adj.P.Val <= 0.05) %>% filter(logFC.2 > 1 | logFC.2 < -1)
+
+# split into upreg vs downreg
+TC_HC_up <- TC_HC %>% filter(logFC > 0)
+TC_HC_down <- TC_HC %>% filter(logFC < 0)
+
+SCI_HC_up <- SCI_HC %>% filter(logFC > 0)
+SCI_HC_down <- SCI_HC %>% filter(logFC < 0)
+
+SCI_TC_up <- SCI_TC %>% filter(logFC > 0)
+SCI_TC_down <- SCI_TC %>% filter(logFC < 0)
+```
+
+# Same thing, but first remove Mt/Rt genes
+
+```{r}
+# Remove Mt/Rb genes from Kyritsis
+allDEGs_filt <- allDEGs[grep("^MT-|^RPS|^RPL", allDEGs$Feature, invert = TRUE),]
+
+# now filt
+TC_HC_f <- allDEGs_filt %>% filter(TC.HC.adj.P.Val <= 0.05) %>% filter(logFC > 1 | logFC < -1)
+SCI_HC_f <- allDEGs_filt %>% filter(SCI.HC.adj.P.Val <= 0.05) %>% filter(logFC.1 > 1 | logFC.1 < -1)
+SCI_TC_f <- allDEGs_filt %>% filter(SCI.TC.adj.P.Val <= 0.05) %>% filter(logFC.2 > 1 | logFC.2 < -1)
+
+# split into upreg vs downreg
+TC_HC_f_up <- TC_HC_f %>% filter(logFC > 0)
+TC_HC_f_down <- TC_HC_f %>% filter(logFC < 0)
+
+SCI_HC_f_up <- SCI_HC_f %>% filter(logFC > 0)
+SCI_HC_f_down <- SCI_HC_f %>% filter(logFC < 0)
+
+SCI_TC_f_up <- SCI_TC_f %>% filter(logFC > 0)
+SCI_TC_f_down <- SCI_TC_f %>% filter(logFC < 0)
+```
+
+# Split our inhouse data into upreg and downreg
+
+```{r}
+SCIvnaive_up <- SCIvnaive %>% filter(avg_log2FC > 0)
+SCIvnaive_down <- SCIvnaive %>% filter(avg_log2FC < 0)
+
+SCIvsSham_up <- SCIvsSham %>% filter(avg_log2FC > 0)
+SCIvsSham_down <- SCIvsSham %>% filter(avg_log2FC < 0)
+
+shamvnaive_up <- shamvnaive %>% filter(avg_log2FC > 0)
+shamvnaive_down <- shamvnaive %>% filter(avg_log2FC < 0)
+```
+
+
+# Now select the SCI-associated genes
+
+i.e. (SCI_HC + SCI_TC) - (TC_HC)
+
+```{r}
+kyr_up_SCI <- setdiff(union(SCI_HC_f_up$Feature, SCI_TC_f_up$Feature), TC_HC_f_up$Feature)
+kyr_down_SCI <- setdiff(union(SCI_HC_f_down$Feature, SCI_TC_f_down$Feature), TC_HC_f_down$Feature)
+
+mmu_up_SCI <- setdiff(union(SCIvnaive_up$gene, SCIvsSham_up$gene), shamvnaive_up$gene)
+mmu_down_SCI <- setdiff(union(SCIvnaive_down$gene, SCIvsSham_down$gene), shamvnaive_down$gene)
+```
+
+# calculate the overlap
+
+```{r}
+shared_up <- as.data.frame(intersect(kyr_up_SCI, mmu_up_SCI))
+shared_down <- as.data.frame(intersect(kyr_down_SCI, mmu_down_SCI))
+
+shared_up$direction <- "up"
+shared_down$direction <- "down"
+
+shared <- rbind(shared_up, shared_down)
+colnames(shared) <- c("gene", "cluster")
+write.table(shared, file = paste0(outdir, "sharedGenes.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# save all the lists
+
+# Split our inhouse data into upreg and downreg
+
+```{r}
+dir.create(file.path(outdir, "genelists"), showWarnings = FALSE)
+
+# inhouse data
+write.table(SCIvnaive_up, file = paste0(outdir, "genelists/", "Hmu_", "SCIvNaive_", "up", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(SCIvnaive_down, file = paste0(outdir, "genelists/", "Hmu_", "SCIvNaive_", "down", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+write.table(SCIvsSham_up, file = paste0(outdir, "genelists/", "Hmu_", "SCIvsSham_", "up", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(SCIvsSham_down, file = paste0(outdir, "genelists/", "Hmu_", "SCIvsSham_", "down", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+write.table(shamvnaive_up, file = paste0(outdir, "genelists/", "Hmu_", "ShamvNaive_", "up", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(shamvnaive_down, file = paste0(outdir, "genelists/", "Hmu_", "ShamvNaive_", "down", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+# Kyritsis, with Mt/Rb filtering
+write.table(TC_HC_f_up, file = paste0(outdir, "genelists/", "Kyr_", "TC_HC_", "up_", "NoRbMt", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(TC_HC_f_down, file = paste0(outdir, "genelists/", "Kyr_", "TC_HC_", "down_", "NoRbMt", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+write.table(SCI_HC_f_up, file = paste0(outdir, "genelists/", "Kyr_", "SCI_HC_", "up_", "NoRbMt", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(SCI_HC_f_down, file = paste0(outdir, "genelists/", "Kyr_", "SCI_HC_", "down_", "NoRbMt", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+write.table(SCI_TC_f_up, file = paste0(outdir, "genelists/", "Kyr_", "SCI_TC_", "up_", "NoRbMt", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(SCI_TC_f_down, file = paste0(outdir, "genelists/", "Kyr_", "SCI_TC_", "down_", "NoRbMt", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+# Kyritsis, without Mt/Rb filtering
+write.table(TC_HC_up, file = paste0(outdir, "genelists/", "Kyr_", "TC_HC_", "up_", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(TC_HC_down, file = paste0(outdir, "genelists/", "Kyr_", "TC_HC_", "down_", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+write.table(SCI_HC_up, file = paste0(outdir, "genelists/", "Kyr_", "SCI_HC_", "up_", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(SCI_HC_down, file = paste0(outdir, "genelists/", "Kyr_", "SCI_HC_", "down_", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+
+write.table(SCI_TC_up, file = paste0(outdir, "genelists/", "Kyr_", "SCI_TC_", "up_", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(SCI_TC_down, file = paste0(outdir, "genelists/", "Kyr_", "SCI_TC_", "down_", ".txt"), sep = "\t", quote = FALSE, col.names = NA)
+```

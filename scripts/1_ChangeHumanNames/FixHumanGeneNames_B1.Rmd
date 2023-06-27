@@ -1,0 +1,46 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+df <- readRDS("/Volumes/SciDrive/Archive/SCI/HumanisedMouse/Sonny/Sandbox/20220210_TestSonnysCode/outdir/HumanisedMouse_HumanOnly_C3.RDS")
+sampleID <- "C3"
+outdir <- "/scripts/1_ChangeHumanNames/outdir/"
+```
+
+
+# Rename the gene names
+
+For Seurat v3, you need to modify the counts, data and scale.data slots for every assay you have in your Seurat object. In addition, you will also need to modify the meta.data slots for both the object and each assay object contained within the Seurat object. Finally, you'll need to rerun any dimensional reduction and graph-building (eg. FindNeighbors) procedures. More details about the Seurat v3 object structure can be found in our Developer's Guide.
+
+https://github.com/satijalab/seurat/issues/1049
+
+```{r}
+# First confirm that we only have human genes
+length(grep("GRCh38", rownames(df)))
+length(rownames(df))
+```
+All the gene names have GRCh38 in them
+
+```{r}
+new_names <- rownames(df) %>% gsub("GRCh38-", "", .)
+```
+
+```{r}
+# counts, data and scale.data slots for every assay
+# RNA assay
+rownames(df@assays$RNA@counts) <- rownames(df@assays$RNA@counts) %>% gsub("GRCh38-", "", .)
+rownames(df@assays$RNA@data) <- rownames(df@assays$RNA@data) %>% gsub("GRCh38-", "", .)
+```
+
+```{r}
+saveRDS(df, file = paste0(outdir, sampleID, ".RDS"))
+```
+

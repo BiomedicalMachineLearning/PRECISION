@@ -1,0 +1,93 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+https://bioconductor.org/packages/release/bioc/vignettes/SingleR/inst/doc/SingleR.html
+
+```{r}
+library(Seurat)
+library(SingleR)
+library(celldex)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+sce <- as.SingleCellExperiment(df)
+outdir <- "/scripts/12c_TestSingleR/outdir/"
+```
+
+```{r}
+hpca.se <- HumanPrimaryCellAtlasData()
+```
+
+```{r}
+pred.hummouse_main <- SingleR(test = sce, ref = hpca.se, assay.type.test=1,
+    labels = hpca.se$label.main)
+```
+
+```{r}
+pred.hummouse_fine <- SingleR(test = sce, ref = hpca.se, assay.type.test=1,
+    labels = hpca.se$label.fine)
+```
+
+```{r}
+table(pred.hummouse_main$labels)
+```
+```{r}
+table(pred.hummouse_fine$labels)
+```
+
+```{r}
+main_labels <- as.data.frame(pred.hummouse_main[,"labels",drop = FALSE])
+fine_labels <- as.data.frame(pred.hummouse_fine[,"labels",drop = FALSE])
+write.table(main_labels, file = paste0(outdir, "main_labels.txt"), sep = "\t", quote = FALSE, col.names = NA)
+write.table(fine_labels, file = paste0(outdir, "fine_labels.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+```{r}
+saveRDS(pred.hummouse_fine, file = paste0(outdir, "singleR_object_HummouseFine.RDS"))
+saveRDS(pred.hummouse_main, file = paste0(outdir, "singleR_object_HummouseMain.RDS"))
+```
+
+# Add into Seurat object and plot
+
+```{r}
+colnames(main_labels) <- "main_labels"
+colnames(fine_labels) <- "fine_labels"
+df <- AddMetaData(df, main_labels)
+df <- AddMetaData(df, fine_labels)
+```
+
+```{r}
+DimPlot(df, group.by = "main_labels") + NoLegend()
+ggsave(filename = paste0(outdir, "UMAP_mainlabels.jpeg"), width = 5, height = 5)
+DimPlot(df, group.by = "main_labels")
+ggsave(filename = paste0(outdir, "UMAP_mainlabels_legend.jpeg"), width = 12, height = 12)
+DimPlot(df, group.by = "fine_labels") + NoLegend()
+ggsave(filename = paste0(outdir, "UMAP_finelabels.jpeg"), width = 5, height = 5)
+DimPlot(df, group.by = "fine_labels")
+ggsave(filename = paste0(outdir, "UMAP_finelabels_legend.jpeg"), width = 20)
+```
+
+There are lots of hits here but i don't htink most of them are very dominant.
+
+```{r}
+fine_counts <- as.data.frame(table(df[[c("fine_labels", "integrated_snn_res.0.4")]]))
+# remove hits with fewer than 5 cells
+fine_counts <- fine_counts %>% filter(Freq > 5)
+fine_counts <- reshape(fine_counts, idvar = "fine_labels", timevar = "integrated_snn_res.0.4", direction = "wide")
+fine_counts[is.na(fine_counts)] <- 0
+write.table(fine_counts, file = paste0(outdir, "clustersVSfine.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+```{r}
+main_counts <- as.data.frame(table(df[[c("main_labels", "integrated_snn_res.0.4")]]))
+# remove hits with fewer than 5 cells
+main_counts <- main_counts %>% filter(Freq > 5)
+main_counts <- reshape(main_counts, idvar = "main_labels", timevar = "integrated_snn_res.0.4", direction = "wide")
+main_counts[is.na(main_counts)] <- 0
+write.table(main_counts, file = paste0(outdir, "clustersVSmain.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```

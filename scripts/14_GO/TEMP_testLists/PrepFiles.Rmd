@@ -1,0 +1,22 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/14_GO/TEMP_testLists/"
+
+old_list <- read.delim("/scripts/13b_ProcessForGO/Samplewise/outdir/deprecated/4.1_SCIvsshamnaive_blood_ComparisonVenn_Markers_RemoveRbMt.txt", row.names = 1)
+old_list <- old_list %>% filter(cluster == "SCI_only")
+old_list$cluster <- gsub("SCI_only", "SCI_only_merge", old_list$cluster)
+
+new_list <- read.delim("/scripts/13b_ProcessForGO/Samplewise/outdir/4.1_SCIvsshamnaive_blood_ComparisonVenn_Markers_RemoveRbMt_SCIonly.txt", row.names = 1)
+
+merge <- rbind(old_list, new_list)
+write.table(merge, file = paste0(outdir, "TestMergeFile.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+

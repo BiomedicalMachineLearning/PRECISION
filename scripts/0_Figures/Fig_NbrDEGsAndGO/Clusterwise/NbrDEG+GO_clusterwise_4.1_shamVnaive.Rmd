@@ -1,0 +1,246 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+sampleID <- "4.1_shamVnaive"
+markers_all <-read.delim("/scripts/13b_ProcessForGO/Clusterwise/outdir/4.1_SCIvsshamnaive_blood_Markers_KeepSeparate.txt")
+markers_noRb <- read.delim("/scripts/13b_ProcessForGO/Clusterwise/outdir/4.1_SCIvsshamnaive_blood_Markers_KeepSeparate_dropRbMt.txt")
+  
+GO_noRb <- read.delim("/scripts/14_GO/Clusterwise_AllGenes_RemoveRbMt/outdir_4.1_3ComparisonsSeparate/clust_4.1_separate_top100GO_FiltSimp.txt")
+
+outdir <- "/scripts/0_Figures/Fig_NbrDEGsAndGO/Clusterwise/outdir/"
+```
+
+```{r}
+# filter GO to sham vs naive only
+markers_all <- markers_all %>% filter(analysisID == "shamVnaive")
+markers_noRb <- markers_noRb %>% filter(analysisID == "shamVnaive")
+GO_noRb <- GO_noRb[ grep("shamVnaive", GO_noRb$Cluster),]
+
+# add in a direction column
+markers_all$direction <- markers_all$cluster
+markers_all$direction <- gsub("shamVnaive_.*_", "", markers_all$direction)
+markers_noRb$direction <- markers_noRb$cluster
+markers_noRb$direction <- gsub("shamVnaive_", "", markers_noRb$direction)
+GO_noRb$direction <- GO_noRb$Cluster
+GO_noRb$direction <- gsub("shamVnaive_", "", GO_noRb$direction)
+```
+
+```{r}
+palette_sample = c(`blood_SCI_veh` = "#3C0D03",
+                   `blood_SCI_ivig` = "#99280A",
+                    `blood_sham_veh` = "#EC9543",
+                   `blood_naive_veh` = "#F3C34D",
+                   `cord_SCI_veh` = "#0A3351",
+                   `cord_SCI_ivig` = "#3274A3")
+
+palette_clust = c(
+            # T cells
+            `0` = "gold", #CD4
+            `1` = "orangered", #Treg
+            `3` = "deeppink2", #naive_CD8
+            `4` = "darkorchid4", #mem_CD8
+            `5` = "chocolate1", #naive_CD4
+            # B cells
+            `2` = "peachpuff4", #naive_memB 1+2 (1)
+            `8` = "peru", #naive_memB 1+2 (2)
+            # NKT
+            `6` = "limegreen", #NKT_DC
+            `7` = "forestgreen", #NKT_B & NKT_DC
+            # other
+            `9` = "darkturquoise", #basophil
+            `10` = "navyblue") #neutrophil
+
+palette_dir = c(`down` = "#2166AC",
+                `up` = "#B2182B")
+
+palette_dirRb = c(`down_noRb` = "#2166AC",
+                  `down_NbrRibo` = "#90B2D5",
+                `up_noRb` = "#B2182B",
+                `up_NbrRibo` = "#D88B95"
+                )
+```
+
+```{r}
+nbr_markers_all <- as.data.frame(table(markers_all$cluster))
+nbr_markers_all$Var1 <- gsub("shamVnaive_", "", nbr_markers_all$Var1) #direction
+nbr_markers_all$direction <- gsub(".*_", "", nbr_markers_all$Var1) #direction
+nbr_markers_all$clusterID <-  gsub("_.*", "", nbr_markers_all$Var1) #cluster
+colnames(nbr_markers_all) <- c("cluster_direction", "# of markers", "direction", "cluster")
+
+
+nbr_markers_noRb <- as.data.frame(table(markers_noRb$cluster))
+nbr_markers_noRb$Var1 <- gsub("shamVnaive_", "", nbr_markers_noRb$Var1) #direction
+nbr_markers_noRb$direction <- gsub(".*_", "", nbr_markers_noRb$Var1) #direction
+nbr_markers_noRb$clusterID <-  gsub("_.*", "", nbr_markers_noRb$Var1) #cluster
+colnames(nbr_markers_noRb) <- c("cluster_direction", "# of markers", "direction", "cluster")
+```
+
+```{r}
+# make sure each cluster has both up and down
+CheckUpDown <- function(mycluster) {
+  temp <- nbr_markers_all %>% filter(cluster == mycluster)
+  
+  if (!("up" %in% temp$direction)) {
+  addIn <- data.frame("cluster_direction" = paste0(mycluster, "_up"),
+                                  "# of markers" = 0,
+                                  "direction" = "up",
+                                  "cluster" = mycluster, check.names = FALSE) 
+  temp <- rbind(temp, addIn)
+  }
+  
+  if (!("down" %in% temp$direction)) {
+  addIn <- data.frame("cluster_direction" = paste0(mycluster, "_down"),
+                                  "# of markers" = 0,
+                                  "direction" = "down",
+                                  "cluster" = mycluster, check.names = FALSE) 
+  temp <- rbind(temp, addIn)
+  }
+  return(temp)
+}
+nbr_markers_all2 <- lapply(unique(nbr_markers_all$cluster), CheckUpDown) %>% bind_rows()
+```
+
+```{r}
+# make sure each cluster has both up and down
+CheckUpDown <- function(mycluster) {
+  temp <- nbr_markers_noRb %>% filter(cluster == mycluster)
+  
+  if (!("up" %in% temp$direction)) {
+  addIn <- data.frame("cluster_direction" = paste0(mycluster, "_up"),
+                                  "# of markers" = 0,
+                                  "direction" = "up",
+                                  "cluster" = mycluster, check.names = FALSE) 
+  temp <- rbind(temp, addIn)
+  }
+  
+  if (!("down" %in% temp$direction)) {
+  addIn <- data.frame("cluster_direction" = paste0(mycluster, "_down"),
+                                  "# of markers" = 0,
+                                  "direction" = "down",
+                                  "cluster" = mycluster, check.names = FALSE) 
+  temp <- rbind(temp, addIn)
+  }
+  return(temp)
+}
+nbr_markers_noRb2 <- lapply(unique(nbr_markers_noRb$cluster), CheckUpDown) %>% bind_rows()
+```
+
+# set the cluster factors
+
+```{r}
+factor_order_all <- unique(nbr_markers_all2$cluster[order(as.numeric(nbr_markers_all2$cluster %>% gsub("cl", "", .)))])
+nbr_markers_all2$cluster <- factor(nbr_markers_all2$cluster, levels = factor_order_all)
+
+factor_order_Rb <- unique(nbr_markers_noRb2$cluster[order(as.numeric(nbr_markers_noRb2$cluster %>% gsub("cl", "", .)))])
+nbr_markers_noRb2$cluster <- factor(nbr_markers_noRb2$cluster, levels = factor_order_Rb)
+```
+
+```{r}
+ggplot(nbr_markers_all2, aes(x=direction, y=`# of markers`, fill = direction)) + 
+    geom_bar(stat = "identity") +
+    scale_fill_manual(values = palette_dir) +
+    theme(legend.position="none") +
+    theme_bw() + 
+    geom_text(aes(label = `# of markers`), vjust = -1, color="black", size = 2) +
+  facet_grid(~cluster)
+ggsave(filename = paste0(outdir, sampleID, "_NumberOfDEGs_all.pdf"), width = 7, height = 4)
+```
+
+```{r}
+ggplot(nbr_markers_noRb2, aes(x=direction, y=`# of markers`, fill = direction)) + 
+    geom_bar(stat = "identity") +
+    scale_fill_manual(values = palette_dir) +
+    theme(legend.position="none") +
+    theme_bw() + 
+    geom_text(aes(label = `# of markers`), vjust = -1, color="black", size = 2) +
+    facet_grid(~cluster)
+ggsave(filename = paste0(outdir, sampleID, "_NumberOfDEGs_dropRbMt.pdf"), width = 7, height = 4)
+```
+
+# same thing, but make a stacked bar showing the number of Rb and non-Rb genes there are
+
+```{r}
+# first, calculate the diffrence between nbr_markers_all and nbr_markers_noRb (i.e. total number of Rb genes)
+nbr_markers_noRb_temp <- nbr_markers_noRb2
+colnames(nbr_markers_noRb_temp) <- c("cluster_direction", "noRb", "direction", "cluster")
+nbr_markers_all_temp <- nbr_markers_all2
+colnames(nbr_markers_all_temp) <- c("cluster_direction", "Rb", "direction", "cluster")
+
+temp <- cbind(nbr_markers_noRb_temp, nbr_markers_all_temp)
+temp <- temp[,c(1,2, 3, 4, 6)]
+temp <- mutate(temp, NbrRibo = Rb - noRb)
+temp <- temp[,c(1,2, 3, 4, 6)] # remove the "Rb" column
+# make long
+nbr_markers_both <- reshape2::melt(temp)
+# add a separate fill column
+nbr_markers_both <- mutate(nbr_markers_both, myfill = paste0(direction, "_", variable))
+```
+
+```{r}
+ggplot(nbr_markers_both, aes(fill = myfill, y = value, x = direction)) + 
+    geom_bar(position="stack", stat="identity") +
+  scale_fill_manual(values = palette_dirRb) +
+    theme(legend.position="none") +
+    theme_bw() +
+    facet_grid(~cluster)
+ggsave(filename = paste0(outdir, sampleID, "_NumberOfDEGs_Rb+NoRb.pdf"), width = 7, height = 4)
+```
+
+# Now plot the number of enriched GO terms
+
+```{r}
+NbrGo <- as.data.frame(table(GO_noRb %>% filter(p.adjust <= 0.05) %>% pull(Cluster)))
+NbrGo$Var1 <- gsub("shamVnaive_", "", NbrGo$Var1) #direction
+NbrGo$direction <- gsub(".*_", "", NbrGo$Var1) #direction
+NbrGo$clusterID <-  gsub("_.*", "", NbrGo$Var1) #cluster
+colnames(NbrGo) <- c("cluster_direction", "# of GO terms", "direction", "cluster")
+```
+
+```{r}
+# make sure each cluster has both up and down
+CheckUpDown <- function(mycluster) {
+  temp <- NbrGo %>% filter(cluster == mycluster)
+  
+  if (!("up" %in% temp$direction)) {
+  addIn <- data.frame("cluster_direction" = paste0(mycluster, "_up"),
+                                  "# of GO terms" = 0,
+                                  "direction" = "up",
+                                  "cluster" = mycluster, check.names = FALSE) 
+  temp <- rbind(temp, addIn)
+  }
+  
+  if (!("down" %in% temp$direction)) {
+  addIn <- data.frame("cluster_direction" = paste0(mycluster, "_down"),
+                                  "# of GO terms" = 0,
+                                  "direction" = "down",
+                                  "cluster" = mycluster, check.names = FALSE) 
+  temp <- rbind(temp, addIn)
+  }
+  return(temp)
+}
+NbrGo2 <- lapply(unique(NbrGo$cluster), CheckUpDown) %>% bind_rows()
+```
+
+```{r}
+# make sure down is always first
+NbrGo2$direction <- factor(NbrGo2$direction, levels = c("down", "up"))
+```
+
+```{r}
+ggplot(NbrGo2, aes(x=direction, y=`# of GO terms`, fill = direction)) + 
+    geom_bar(stat = "identity") +
+    scale_fill_manual(values = palette_dir) +
+    theme(legend.position="none") +
+    theme_bw() + 
+    geom_text(aes(label = `# of GO terms`), vjust = -1, color="black", size = 2) +
+    facet_grid(~cluster)
+ggsave(filename = paste0(outdir, sampleID, "_NumberOfGO_dropRbMt.pdf"), width = 7, height = 4)
+```

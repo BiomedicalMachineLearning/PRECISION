@@ -1,0 +1,173 @@
+---
+title: "11.5_NetworkToUMAP.Rmd"
+author: "Laura Grice"
+date: "9th July 2020"
+output: html_notebook
+---
+
+TO DO: UPDATE TO SELECT METACELL NODES, AS PER THIS FILE: /scripts/2_output/11_metacell/11.6_NetworkToUmap/DC/select_by_metacell/DC_11.6_NetworkToUMAP_byMetacell.Rmd
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Goal: To select a region of interest in a Metacell network diagram, extract the cells associated with those metacells/that region, and visualise them in a Seurat UMAP plot.
+
+# User input
+
+Here:
+* SampleID = some name (can be anything - but it's good if it's something informative about the region you will pick, e.g. "neut_bottom"
+* seurat.path = path to the Seurat object you want to map cells to
+* seurat.annotation.col = name of a Seurat metadata column (will be used to colorise the original network diagram)
+* outdir_metacell_figs and _objs = the directories where the Metacell analysis was originally run
+* workdir = any directory, where output from this re-analysis will be saved
+
+```{r}
+sampleID <- "neut_bottom"
+seurat.path <- "/scripts/2_output/10i_ClusterContaminants/out_obj/df_subclusters.RDS"
+seurat.annotation.col <- "subclust"
+outdir_metacell_figs <- "/scripts/2_output/11_metacell/11.3_RunMetacell/neut/out_fig/"
+outdir_metacell_obj <- "/scripts/2_output/11_metacell/11.3_RunMetacell/neut/out_obj/"
+workdir <- "/scripts/1a_sandbox/20200708_sandbox_markersOnNetwork/out/"
+```
+
+```{r}
+library(metacell)
+library(Seurat)
+library(ggplot2)
+library(gatepoints)
+```
+
+# Visualise the existing data
+
+## Plot the network diagram
+
+```{r}
+# Re-initialise the Metacell data
+scdb_init(outdir_metacell_obj, force_reinit = T)
+scfigs_init(outdir_metacell_figs)
+
+# Not strictly necessary - change the analysis ID so that any changes to the Metacell objects don't over-write the original analysis
+mc_play = scdb_mc("test_mc_f")
+scdb_add_mc("playing", mc_play)
+
+# Prepare annotations to colourise the network diagram
+## first get the order of cells we need to colour
+mc2d = scdb_mc2d("test_2dproj")
+cellnames <- names(mc2d@sc_x)
+mc = scdb_mc(mc2d@mc_id)
+## get the cellID-to-cluster conversion, and filter it so it is the same length and order as the cellID-to-metacell conversion
+df <- readRDS(seurat.path)
+clusterannotations <- df[[seurat.annotation.col]]
+clusterannotations <-clusterannotations[cellnames, , drop = FALSE]
+## get the node and edge data
+fr = mc2d@graph$mc1
+to = mc2d@graph$mc2
+```
+
+```{r}
+# Build the network diagram
+## first need to merge all the data into a table
+networkdata <- cbind(as.data.frame(mc2d@sc_x), as.data.frame(mc2d@sc_y), clusterannotations)
+colnames(networkdata) <- c("mc2d_xval", "mc2d_yval", "cluster")
+## make a custom palette
+length <- length(unique(networkdata$cluster)) + 2 #longer, i don't like the first two colours
+palette <- DiscretePalette(length, palette = "polychrome")
+palette <- palette[3:length]
+## plot the graph
+network <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$cluster), size = 1) +
+  scale_color_manual(values = palette) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray43") +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "lightyellow", color = "black", size = 6) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 3.5) +
+  theme_void() +
+  theme(legend.position = "bottom")
+network
+#ggsave(filename = paste0(workdir, sampleID, "_networkdiagram.pdf"), width = 10, height = 10)
+```
+
+## Plot the Seurat dim plot
+```{r}
+## get axis range
+plot <- DimPlot(df)
+xrange <- ggplot_build(plot)$layout$panel_scales_x[[1]]$range$range
+yrange <- ggplot_build(plot)$layout$panel_scales_y[[1]]$range$range
+
+df2 <- subset(df, cells = cellnames)
+DimPlot(df2, group.by = seurat.annotation.col, label = TRUE, repel = TRUE, cols = palette) +
+   NoLegend() +
+   xlim(xrange) +
+   ylim(yrange)
+# ggsave(paste0(workdir, sampleID, "_seuratplot.pdf"))
+```
+
+# Select the points of interest
+
+## Prepare the data first
+
+```{r fig.height=8, fig.width=8}
+data <- networkdata
+remove <- which(is.na(data$mc2d_xval) | is.na(data$mc2d_yval))
+if (length(remove) > 0) {
+data <- data[-remove,]  
+}
+data$cluster <- droplevels(data$cluster)
+plot(x=data$mc2d_xval, y=data$mc2d_yval, col = palette[ unclass(data$cluster) ], cex = 0.5, pch = 16)
+```
+
+try and plot better colours
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$cluster), size = 1) +
+
+
+```{r}
+# call the following in the console:
+#plot(x=data$mc2d_xval, y=data$mc2d_yval, col = palette[ unclass(data$cluster) ], cex = 0.5, pch = 16)
+#selectedPoints <- fhs(data, mark = TRUE)
+```
+
+## Re-plot the graph, highlighting your selected points
+
+Sanity check.
+
+```{r}
+selectedPoints <- as.vector(selectedPoints)
+# colour as red
+colours <- ifelse(rownames(data) %in% selectedPoints, "red", "black")
+plot(data[,1:2], col = colours, cex = 0.5, pch = 16)
+```
+
+# Use as metadata in your Seurat object
+
+Note, here we use a Seurat object containing only the cells used in Metacell, but it won't matter if you want to use the full Seurat object.
+
+```{r}
+meta <- as.data.frame(rownames(df2[[]]))
+colnames(meta) <- "cells"
+meta <- mutate(meta, "selected" = ifelse(meta$cells %in% selectedPoints, "selected", "not"))
+rownames(meta) <- meta$cells
+meta$cells <- NULL
+```
+
+```{r}
+df2 <- AddMetaData(df2, metadata = meta)
+```
+
+```{r fig.height=5, fig.width=5}
+DimPlot(df2, group.by = "selected", order = c("selected"))
+```
+
+```{r}
+table <- as.data.frame(selectedPoints)
+write.table(table, paste0(workdir, sampleID, "_ROI.txt"), quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE)
+```
+

@@ -1,0 +1,274 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(ComplexHeatmap)
+library(RColorBrewer)
+```
+
+
+```{r}
+kyritsis <- read.csv("/scripts/16_CompareKyritsis/Paper/GSE151371_normalized_expression_matrix_comBat_de-ID.csv", row.names = 1)
+
+inhouse <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+```
+
+```{r}
+outdir <- "/scripts/16_CompareKyritsis/1_LinearRegressionCompare/outdir/"
+```
+
+Maybe i should use the raw counts and then log normalise the list myself so they're done the same way....
+
+# For kyritsis, calculate average normalised gene expression by condition
+
+HC = healthy control
+TC = sham
+SCI = SCI
+
+```{r}
+kyr_healthy <- kyritsis[,grep("HC", colnames(kyritsis))]
+kyr_sham <- kyritsis[,grep("TC", colnames(kyritsis))]
+kyr_SCI <- kyritsis[,grep("SCI", colnames(kyritsis))]
+
+kyr_healthy <- as.data.frame(rowMeans(kyr_healthy))
+kyr_sham <- as.data.frame(rowMeans(kyr_sham))
+kyr_SCI <- as.data.frame(rowMeans(kyr_SCI))
+
+colnames(kyr_healthy) <- c("kyr_healthy")
+colnames(kyr_sham) <- c("kyr_sham")
+colnames(kyr_SCI) <- c("kyr_SCI")
+
+kyr_ave <- cbind(kyr_healthy, kyr_sham, kyr_SCI)
+```
+
+
+# For scRNASeq, calculate average normalised gene expression by condition
+
+If slot is set to 'data', this function assumes that the data has been log normalized and therefore feature values are exponentiated prior to averaging so that averaging is done in non-log space. Otherwise, if slot is set to either 'counts' or 'scale.data', no exponentiation is performed prior to averaging If return.seurat = TRUE and slot is not 'scale.data', averaged values are placed in the 'counts' slot of the returned object and the log of averaged values are placed in the 'data' slot. ScaleData is then run on the default assay before returning the object. If return.seurat = TRUE and slot is 'scale.data', the 'counts' slot is left empty, the 'data' slot is filled with NA, and 'scale.data' is set to the aggregated values.
+
+
+```{r}
+# filter to keep only blood
+keep <- names(which(inhouse$tissue == "blood"))
+inhouse <- subset(inhouse, cells = keep)
+
+ave_inhouse <- AverageExpression(inhouse, assays = "RNA", group.by = "injury", slot = "data", return.seurat = TRUE)
+ave_inhouse <- ave_inhouse@assays$RNA@data
+colnames(ave_inhouse) <- c("hm_healthy", "hm_sham", "hm_SCI")
+```
+
+# plot for each comparable dataset
+Matching celltypes:
+* healthy
+* sham
+* SCI
+
+# merge the tables
+
+```{r}
+# genes in both
+shared <- intersect(rownames(ave_inhouse), rownames(kyr_ave))
+ave_inhouse_slim <- ave_inhouse[shared,]
+ave_kyr_slim <- kyr_ave[shared,]
+# merge
+merged_table <- as.data.frame(cbind(ave_inhouse_slim, ave_kyr_slim))
+write.table(merged_table, file = paste0(outdir, "MergedAveCounts_Kyritsis+Inhouse.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+```{r}
+# palette = c(
+#   # neutrophils = oranges
+#   `neutrophils` = "orange",
+#   `microglia` = "darkmagenta",
+#   `monocytes` = "forestgreen",
+#   `macrophages` = "#D1147F",
+#   `Bcells` = "coral",
+#   `NKT` = "turquoise",
+#   `DCs` = "dodgerblue")
+```
+
+
+```{r}
+ggplot(merged_table, aes(x = hm_healthy, y = kyr_healthy)) +
+  geom_point(color = "dodgerblue") +
+  theme_bw() +
+  xlab("naive (in-house)") +
+  ylab("naive (Kyritsis)")
+ggsave(filename = paste0(outdir, "ExpCompare_", "naive", ".pdf"), width = 5, height = 5)
+
+ggplot(merged_table, aes(x = hm_sham, y = kyr_sham)) +
+  geom_point(color = "#D1147F") +
+  theme_bw() +
+  xlab("sham (in-house)") +
+  ylab("sham (Kyritsis)")
+ggsave(filename = paste0(outdir, "ExpCompare_", "sham", ".pdf"), width = 5, height = 5)
+
+ggplot(merged_table, aes(x = hm_SCI, y = kyr_SCI)) +
+  geom_point(color = "darkmagenta") +
+  theme_bw() +
+  xlab("sham (in-house)") +
+  ylab("sham (Kyritsis)")
+ggsave(filename = paste0(outdir, "ExpCompare_", "sham", ".pdf"), width = 5, height = 5)
+```
+
+```{r}
+mycorr_p <- cor(merged_table, method = c("pearson"))
+mycorr_s <- cor(merged_table, method = c("spearman"))
+
+# filter so it's our data vs milich only
+mycorr_p_filt <- mycorr_p[,c("DCs", "macrophages", "microglia", "monocytes", "neutrophils")]
+mycorr_p_filt <- mycorr_p_filt[c("DCs_M", "macrophages_M", "microglia_M", "monocytes_M", "neutrophils_M"),]
+
+mycorr_s_filt <- mycorr_s[,c("DCs", "macrophages", "microglia", "monocytes", "neutrophils")]
+mycorr_s_filt <- mycorr_s_filt[c("DCs_M", "macrophages_M", "microglia_M", "monocytes_M", "neutrophils_M"),]
+```
+
+```{r}
+#CellPalette = circlize::colorRamp2(c(0, 0.25, 0.5, 0.75, 1), c("darkblue", "lightskyblue", "white", "lightpink", "darkred"))
+CellPalette = circlize::colorRamp2(c(0, 0.25, 0.5, 0.75, 1), c("white", brewer.pal(4, "YlOrRd")))
+
+
+ht <- Heatmap(mycorr_p_filt,
+        cluster_rows = FALSE, cluster_columns = FALSE,
+        col = CellPalette, 
+        # split up clusters (cols) and additional genes (rows)
+        use_raster = TRUE, raster_quality = 1,
+        width = unit(5, "cm"),
+        height = unit(5, "cm")
+        )
+
+pdf(paste0(outdir, "correlation_heatmap.pdf"), height = 6)
+draw(ht, annotation_legend_side = "bottom", heatmap_legend_side = "bottom")
+dev.off()
+```
+
+# Calculate linear regression
+
+https://www.datacamp.com/community/tutorials/linear-regression-R
+
+"Not every problem can be solved with the same algorithm. In this case, linear regression assumes that there exists a linear relationship between the response variable and the explanatory variables. This means that you can fit a line between the two (or more variables). In the previous example, it is clear that there is a relationship between the age of children and their height."
+
+```{r}
+lm_DC <- lm(DCs_M ~ DCs, data = merged_table)
+summary(lm_DC)
+```
+
+Height=a+Age∗b
+(AKA: Height = c + Age ∗ m)
+
+In the "Coefficients" section, you can see the values of the intercept (“c” value) and the slope (“m” value) for the age (x). These “c” and “m” values plot a line between all the points of the data. So in this case, if there is a child that is 20.5 months old, c is 64.92 and m is 0.635, the model predicts (on average) that its height in centimeters is around 64.92 + (0.635 * 20.5) = 77.93 cm.
+
+Another aspect to pay attention to your linear models is the p-value of the coefficients. In simple terms, a p-value indicates whether or not you can reject or accept a hypothesis. The hypothesis, in this case, is that the predictor is not meaningful for your model.
+
+The p-value for age is 4.34*e-10 or 0.000000000434. A very small value means that age is probably an excellent addition to your model. The p-value for the number of siblings is 0.85. In other words, there’s 85% chance that this predictor is not meaningful for the regression.
+
+A good way to test the quality of the fit of the model is to look at the RESIDUALS or the differences between the real values and the predicted values. The straight line in the image above represents the predicted values. The red vertical line from the straight line to the observed data value is the residual.
+
+The idea in here is that the sum of the residuals is approximately zero or as low as possible. In real life, most cases will not follow a perfectly straight line, so residuals are expected. In the R summary of the lm function, you can see descriptive statistics about the residuals of the model, following the same example, the red square shows how the residuals are approximately zero.
+
+[in my case, the min is way off 0, and the max is way off, but the 1Q, median and 3Q are approx zero]
+
+Is the data a good fit? One measure very used to test how good is your model is the coefficient of determination or R². This measure is defined by the proportion of the total variability explained by the regression model.
+
+R² = explained variation of the model / total variation of the model
+
+In general, for models that fit the data well, R² is near 1. Models that poorly fit the data have R² near 0. However, it’s essential to keep in mind that sometimes a high R² is not necessarily good every single time (see below residual plots) and a low R² is not necessarily always bad. In real life, events don’t fit in a perfectly straight line all the time. For example, you can have in your data taller or smaller children with the same age. In some fields, an R² of 0.5 is considered good.
+
+In the blue rectangle, notice that there’s two different R², one multiple and one adjusted. The multiple is the R² that you saw previously. One problem with this R² is that it cannot decrease as you add more independent variables to your model, it will continue increasing as you make the model more complex, even if these variables don’t add anything to your predictions (like the example of the number of siblings). For this reason, the adjusted R² is probably better to look at if you are adding more than one variable to the model, since it only increases if it reduces the overall error of the predictions.
+
+Let’s plot the data (in a simple scatterplot) and add the line you built with your linear model. In this example, let R read the data first, again with the read_excel command, to create a dataframe with the data, then create a linear regression with your new data. The command plot takes a data frame and plots the variables on it. In this case, it plots the pressure against the temperature of the material. Then, add the line made by the linear regression with the command abline.
+
+# calculate the stats and replot the plots
+
+```{r}
+lm_DC <- lm(DCs_M ~ DCs, data = merged_table)
+
+#r2 <- round(summary(lm_DC)$r.squared, digits = 2)
+ggplot(merged_table, aes(x = DCs, y = DCs_M)) +
+  geom_point(color = "dodgerblue") +
+  theme_bw() +
+  xlab("DC (in-house)") +
+  ylab("DC (Milich)") +
+  geom_smooth(method='lm', se=FALSE, color = "black", size = 0.5) +
+  ggpubr::stat_regline_equation(label.x=0, label.y=4.5) +
+  ggpubr::stat_cor(aes(label=..rr.label..), label.x= 0, label.y=4.3)
+ggsave(filename = paste0(outdir, "lm_", "DC", ".pdf"), width = 5, height = 5)
+```
+
+```{r}
+# palette = c(
+#   # neutrophils = oranges
+#   `neutrophils` = "orange",
+#   `microglia` = "darkmagenta",
+#   `monocytes` = "forestgreen",
+#   `macrophages` = "#D1147F",
+#   `Bcells` = "coral",
+#   `NKT` = "turquoise",
+#   `DCs` = "dodgerblue")
+```
+
+
+```{r}
+lm_mac <- lm(macrophages_M ~ macrophages, data = merged_table)
+
+#r2 <- round(summary(lm_DC)$r.squared, digits = 2)
+ggplot(merged_table, aes(x = macrophages, y = macrophages_M)) +
+  geom_point(color = "#D1147F") +
+  theme_bw() +
+  xlab("Mac (in-house)") +
+  ylab("Mac (Milich)") +
+  geom_smooth(method='lm', se=FALSE, color = "black", size = 0.5) +
+  ggpubr::stat_regline_equation(label.x=0, label.y=4.5) +
+  ggpubr::stat_cor(aes(label=..rr.label..), label.x= 0, label.y=4.3)
+ggsave(filename = paste0(outdir, "lm_", "Mac", ".pdf"), width = 5, height = 5)
+```
+
+```{r}
+#lm_micg <- lm(microglia_M ~ microglia, data = merged_table)
+
+#r2 <- round(summary(lm_DC)$r.squared, digits = 2)
+ggplot(merged_table, aes(x = microglia, y = microglia_M)) +
+  geom_point(color = "darkmagenta") +
+  theme_bw() +
+  xlab("Micg (in-house)") +
+  ylab("Micg (Milich)") +
+  geom_smooth(method='lm', se=FALSE, color = "black", size = 0.5) +
+  ggpubr::stat_regline_equation(label.x=0, label.y=4.5) +
+  ggpubr::stat_cor(aes(label=..rr.label..), label.x= 0, label.y=4.3)
+ggsave(filename = paste0(outdir, "lm_", "Micg", ".pdf"), width = 5, height = 5)
+```
+
+```{r}
+#lm_micg <- lm(microglia_M ~ microglia, data = merged_table)
+
+#r2 <- round(summary(lm_DC)$r.squared, digits = 2)
+ggplot(merged_table, aes(x = monocytes, y = monocytes_M)) +
+  geom_point(color = "forestgreen") +
+  theme_bw() +
+  xlab("Mono (in-house)") +
+  ylab("Mono (Milich)") +
+  geom_smooth(method='lm', se=FALSE, color = "black", size = 0.5) +
+  ggpubr::stat_regline_equation(label.x=0, label.y=4.5) +
+  ggpubr::stat_cor(aes(label=..rr.label..), label.x= 0, label.y=4.3)
+ggsave(filename = paste0(outdir, "lm_", "Mono", ".pdf"), width = 5, height = 5)
+```
+
+```{r}
+#lm_micg <- lm(microglia_M ~ microglia, data = merged_table)
+
+#r2 <- round(summary(lm_DC)$r.squared, digits = 2)
+ggplot(merged_table, aes(x = neutrophils, y = neutrophils_M)) +
+  geom_point(color = "orange") +
+  theme_bw() +
+  xlab("Neuts (in-house)") +
+  ylab("Neuts (Milich)") +
+  geom_smooth(method='lm', se=FALSE, color = "black", size = 0.5) +
+  ggpubr::stat_regline_equation(label.x=0, label.y=4.5) +
+  ggpubr::stat_cor(aes(label=..rr.label..), label.x= 0, label.y=4.3)
+ggsave(filename = paste0(outdir, "lm_", "Neuts", ".pdf"), width = 5, height = 5)
+```

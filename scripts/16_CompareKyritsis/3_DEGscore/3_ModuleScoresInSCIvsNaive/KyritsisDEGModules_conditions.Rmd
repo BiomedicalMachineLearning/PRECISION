@@ -1,0 +1,120 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+```
+
+```{r}
+inhouse <- readRDS("/scripts/17_MetacellVehicleOnly/vehicle/11.1a_ReplotUMAP/out_obj/ReplotUMAP_Seurat.RDS")
+Idents(inhouse) <- "integrated_snn_res.0.4"
+DefaultAssay(inhouse) <- "RNA"
+outdir <- "/scripts/16_CompareKyritsis/3_DEGscore/3_ModuleScoresInSCIvsNaive/outdir/"
+```
+
+```{r}
+goi_up_2096 <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_upreg.txt")
+goi_down_2096 <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_downreg.txt")
+
+# genes that are shared by the SCI.TC and SCI.HC comparisons
+goi_up_key <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_upreg_KeyOverlap.txt")
+goi_down_key <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_downreg_KeyOverlap.txt")
+
+# top 50 up and down genes from (1) the 2096 list and (2) the key gene list
+goi_up_top50_2096 <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_top50.txt") %>% filter(direction == "up")
+goi_down_top50_2096 <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_2096_top50.txt") %>% filter(direction == "down")
+
+goi_up_top50_keygenes <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_keygenes_top50.txt") %>% filter(direction == "up")
+goi_down_top50_keygenes <- read.delim("/scripts/16_CompareKyritsis/3_DEGscore/1_ProcessLists/outdir/kyritsis_keygenes_top50.txt") %>% filter(direction == "down")
+```
+
+# Calculate module scores for DEGs
+
+Kyritsis paper is here: `/scripts/16_CompareKyritsis/Paper/jem_20201795.pd
+
+```{r}
+# filter lists to only the genes in the humanised mouse dataset
+up_2096 <- list(goi_up_2096$upreg_2096[goi_up_2096$upreg_2096 %in% rownames(inhouse)])
+down_2096 <- list(goi_down_2096$downreg_2096[goi_down_2096$downreg_2096 %in% rownames(inhouse)])
+
+up_key <- list(goi_up_key$upreg_2096_key[goi_up_key$upreg_2096_key %in% rownames(inhouse)])
+down_key <- list(goi_down_key$downreg_2096_key[goi_down_key$downreg_2096_key %in% rownames(inhouse)])
+
+# i aready filtered the top50 genes to only have genes in the mouse, but I will make them lists
+up_2096_top50 <- list(goi_up_top50_2096$Feature)
+down_2096_top50 <- list(goi_down_top50_2096$Feature)
+up_key_top50 <- list(goi_up_top50_keygenes$Feature)
+down_key_top50 <- list(goi_down_top50_keygenes$Feature)
+```
+
+```{r}
+inhouse <- AddModuleScore(inhouse, features = up_2096, assay = "RNA", name = "score_up_2096")
+inhouse <- AddModuleScore(inhouse, features = down_2096, assay = "RNA", name = "score_down_2096")
+
+inhouse <- AddModuleScore(inhouse, features = up_key, assay = "RNA", name = "score_up_key")
+inhouse <- AddModuleScore(inhouse, features = down_key, assay = "RNA", name = "score_down_key")
+
+# and the top50 gene lists
+inhouse <- AddModuleScore(inhouse, features = up_2096_top50, assay = "RNA", name = "score_up_2096_top50")
+inhouse <- AddModuleScore(inhouse, features = down_2096_top50, assay = "RNA", name = "score_down_2096_top50")
+
+inhouse <- AddModuleScore(inhouse, features = up_key_top50, assay = "RNA", name = "score_up_key_top50")
+inhouse <- AddModuleScore(inhouse, features = down_key_top50, assay = "RNA", name = "score_down_key_top50")
+```
+
+# Violin plots
+
+
+```{r}
+VlnPlot(inhouse, features = "score_up_20961", group.by = "sample")
+ggsave(filename = paste0(outdir, "violin_up_2096.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_down_20961", group.by = "sample")
+ggsave(filename = paste0(outdir, "violin_down_2096.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "score_up_key1", group.by = "sample")
+ggsave(filename = paste0(outdir, "violin_up_keygenes.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_down_key1", group.by = "sample")
+ggsave(filename = paste0(outdir, "violin_down_keygenes.pdf"), width = 5, height = 5)
+
+# and the top 50
+VlnPlot(inhouse, features = "score_up_2096_top501", group.by = "sample")
+ggsave(filename = paste0(outdir, "violin_up_2096_top50.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_down_2096_top501", group.by = "sample")
+ggsave(filename = paste0(outdir, "violin_down_2096_top50.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "score_up_key_top501", group.by = "sample")
+ggsave(filename = paste0(outdir, "violin_up_keygenes_top50.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_down_key_top501", group.by = "sample")
+ggsave(filename = paste0(outdir, "violin_down_keygenes_top50.pdf"), width = 5, height = 5)
+
+```
+
+```{r}
+VlnPlot(inhouse, features = "score_up_20961", group.by = "sample", split.by = "clusters_wholedataset")
+ggsave(filename = paste0(outdir, "sampleclust_violin_up_2096.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_down_20961", group.by = "sample", split.by = "clusters_wholedataset")
+ggsave(filename = paste0(outdir, "sampleclust_violin_down_2096.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "score_up_key1", group.by = "sample", split.by = "clusters_wholedataset")
+ggsave(filename = paste0(outdir, "sampleclust_violin_up_keygenes.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_down_key1", group.by = "sample", split.by = "clusters_wholedataset")
+ggsave(filename = paste0(outdir, "sampleclust_violin_down_keygenes.pdf"), width = 5, height = 5)
+
+# and the top 50
+VlnPlot(inhouse, features = "score_up_2096_top501", group.by = "sample", split.by = "clusters_wholedataset")
+ggsave(filename = paste0(outdir, "sampleclust_violin_up_2096_top50.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_down_2096_top501", group.by = "sample", split.by = "clusters_wholedataset")
+ggsave(filename = paste0(outdir, "sampleclust_violin_down_2096_top50.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "score_up_key_top501", group.by = "sample", split.by = "clusters_wholedataset")
+ggsave(filename = paste0(outdir, "sampleclust_violin_up_keygenes_top50.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_down_key_top501", group.by = "sample", split.by = "clusters_wholedataset")
+ggsave(filename = paste0(outdir, "sampleclust_violin_down_keygenes_top50.pdf"), width = 5, height = 5)
+```
+
+

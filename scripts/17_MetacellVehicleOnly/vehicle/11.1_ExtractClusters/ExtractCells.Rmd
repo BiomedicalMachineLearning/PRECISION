@@ -1,0 +1,31 @@
+---
+title: "DCs and putative pDCs (cluster 15)"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+```
+
+```{r}
+outdir <- "/scripts/17_Metacell/vehicle/11.1_ExtractClusters/out/"
+```
+
+```{r}
+fullseurat <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+sampleID <- "vehicle"
+```
+
+```{r}
+allcells <- rownames(fullseurat[[]])[which(fullseurat[["drug"]] == "veh")]
+```
+
+```{r}
+subsetseurat <- subset(fullseurat, cells = allcells)
+```
+
+```{r}
+saveRDS(subsetseurat, file = paste0(outdir, sampleID, "_subset.RDS"))
+```
+
+

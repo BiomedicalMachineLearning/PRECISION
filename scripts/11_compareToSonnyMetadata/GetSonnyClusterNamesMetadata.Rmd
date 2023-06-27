@@ -1,0 +1,86 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+sonny <- read.delim("/Volumes/SciDrive/Archive/SCI/HumanisedMouse/Thomas2022/2_GetSonnyMetadataNames/outdir/sonny_metadata_clusters.txt", row.names = 1)
+
+outdir <- "/scripts/11_compareToSonnyMetadata/outdir/"
+
+df <- readRDS("/scripts/10c_integrated_clustering/out_obj/allintegratedClustered_Seurat.RDS")
+```
+
+# edit sonny's cell names so they have the suffix
+
+"B1_1" "B2_2" "B4_3" "B4_4" "C2_5" "C3_6"
+
+```{r}
+# separate out the files
+sonny_B1 <- sonny[grep("B1_", rownames(sonny)),]
+sonny_B2 <- sonny[grep("B2_", rownames(sonny)),]
+sonny_B3 <- sonny[grep("B3_", rownames(sonny)),]
+sonny_B4 <- sonny[grep("B4_", rownames(sonny)),]
+# there's no Cs because sonny didn't analyse the Cs
+
+# append the suffix at the end of the names
+rownames(sonny_B1) <- paste0(rownames(sonny_B1), "_1")
+rownames(sonny_B2) <- paste0(rownames(sonny_B2), "_2")
+rownames(sonny_B3) <- paste0(rownames(sonny_B3), "_3")
+rownames(sonny_B4) <- paste0(rownames(sonny_B4), "_4")
+
+sonny_v2 <- rbind(sonny_B1, sonny_B2, sonny_B3, sonny_B4)
+write.table(sonny_v2, file = paste0(outdir, "SonnyMetadata_bloodOnly_updatedBarcodes.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+
+```{r}
+df <- AddMetaData(df, metadata = sonny_v2)
+```
+
+```{r}
+DimPlot(df, group.by = "sonny_clusters", label = TRUE)
+ggsave(filename = paste0(outdir, "UMAP_SonnysClusters.pdf"), width = 6, height = 5)
+DimPlot(df, group.by = "sonny_names", label = TRUE)
+ggsave(filename = paste0(outdir, "UMAP_SonnysClusters_names.pdf"), width = 6, height = 5)
+DimPlot(df, group.by = "integrated_snn_res.0.5", label = TRUE)
+ggsave(filename = paste0(outdir, "UMAP_ClustersRes0.5.pdf"), width = 6, height = 5)
+```
+
+# How much overlap is there between the clusters
+
+```{r}
+blood_cells <- names(which(df$tissue == "blood"))
+df_blood <- subset(df, cells = blood_cells)
+```
+
+```{r}
+compareclust <- df_blood[[c("integrated_snn_res.0.5", "sonny_names")]]
+compareclust_nbr <- as.matrix(table(compareclust))
+write.table(compareclust_nbr, file = paste0(outdir, "CompareClusters.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# how does it look if I re-do clustering at integrated 0.4?
+
+```{r}
+df <- FindClusters(df, resolution = 0.4)
+DimPlot(df, group.by = "integrated_snn_res.0.4", label = TRUE)
+ggsave(filename = paste0(outdir, "UMAP_TRIAL_ClustersRes0.4.pdf"), width = 6, height = 5)
+```
+
+```{r}
+df_blood <- subset(df, cells = blood_cells)
+```
+
+```{r}
+compareclust2 <- df_blood[[c("integrated_snn_res.0.4", "sonny_names")]]
+compareclust2_nbr <- as.matrix(table(compareclust2))
+write.table(compareclust2_nbr, file = paste0(outdir, "CompareClusters_TRIAL_res0.4.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```

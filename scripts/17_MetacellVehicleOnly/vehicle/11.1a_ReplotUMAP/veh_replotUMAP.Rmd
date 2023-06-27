@@ -1,0 +1,199 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(clustree)
+library(dplyr)
+```
+
+```{r}
+sampleID <- "veh"
+df <- readRDS("/scripts/17_Metacell/vehicle/11.1_ExtractClusters/out/vehicle_subset.RDS")
+outdir <- "/scripts/17_Metacell/vehicle/11.1a_ReplotUMAP/out_data/"
+outdir_obj <- "/scripts/17_Metacell/vehicle/11.1a_ReplotUMAP/out_obj/"
+```
+
+```{r}
+DimPlot(df)
+DimPlot(df, label = TRUE) + NoLegend()
+ggsave(filename = paste0(outdir, "OldUMAP_OriginalClusters.pdf"), width = 5, height = 5)
+DimPlot(df, group.by = "sample")
+
+```
+
+```{r}
+df$clusters_wholedataset <- df$integrated_snn_res.0.4
+df$integrated_snn_res.0.4 <- NULL
+```
+
+# Make new variable features
+
+```{r}
+DefaultAssay(df) <- "RNA"
+df <- FindVariableFeatures(df, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(df), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(df)
+LabelPoints(plot = plot1, points = top10, repel = TRUE)
+```
+
+```{r}
+DefaultAssay(df) <- "integrated"
+df <- ScaleData(df, verbose = FALSE)
+df <- RunPCA(df, npcs = 50, verbose = FALSE)
+df <- RunUMAP(df, reduction = "pca", dims = 1:20)
+```
+
+```{r}
+DimPlot(df, label = TRUE, group.by = "clusters_wholedataset") + NoLegend()
+ggsave(filename = paste0(outdir, "NewUMAP_OriginalClusters.pdf"), width = 5, height = 5)
+```
+
+
+# Re-clustering
+
+```{r}
+  df <- FindNeighbors(df, reduction = "pca", dims = 1:20)
+  df.2 <- FindClusters(df, resolution = 0)
+  df.2 <- FindClusters(df.2, resolution = 0.1)
+  df.2 <- FindClusters(df.2, resolution = 0.2)
+  df.2 <- FindClusters(df.2, resolution = 0.3)
+  df.2 <- FindClusters(df.2, resolution = 0.4)
+  df.2 <- FindClusters(df.2, resolution = 0.5)
+  df.2 <- FindClusters(df.2, resolution = 0.6)
+  df.2 <- FindClusters(df.2, resolution = 0.7)
+  df.2 <- FindClusters(df.2, resolution = 0.8)
+  df.2 <- FindClusters(df.2, resolution = 0.9)
+  df.2 <- FindClusters(df.2, resolution = 1)
+  df.2 <- FindClusters(df.2, resolution = 1.2)
+  df.2 <- FindClusters(df.2, resolution = 1.4)
+  df.2 <- FindClusters(df.2, resolution = 1.6)
+  
+  # plot clustering results for the tested resolution values
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.0", label = TRUE) + ggtitle("candidate res = 0") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res0.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.0.1", label = TRUE) + ggtitle("candidate res = 0.1") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res0.1.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.0.2", label = TRUE) + ggtitle("candidate res = 0.2") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res0.2.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.0.3", label = TRUE) + ggtitle("candidate res = 0.3") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res0.3.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.0.4", label = TRUE) + ggtitle("candidate res = 0.4") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res0.4.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.0.5", label = TRUE) + ggtitle("candidate res = 0.5") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res0.5.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.0.6", label = TRUE) + ggtitle("candidate res = 0.6") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res0.6.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.0.7", label = TRUE) + ggtitle("candidate res = 0.7") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res0.7.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.0.8", label = TRUE) + ggtitle("candidate res = 0.8") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res0.8.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.0.9", label = TRUE) + ggtitle("candidate res = 0.9") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res0.9.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.1", label = TRUE) + ggtitle("rcandidate res = 1") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res1.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.1.2", label = TRUE) + ggtitle("candidate res = 1.2") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res1.2.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.1.4", label = TRUE) + ggtitle("candidate res = 1.4") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res1.4.pdf"), width = 5, height = 5)
+  DimPlot(df.2, reduction = "umap", group.by = "integrated_snn_res.1.6", label = TRUE) + ggtitle("candidate res = 1.6") + NoLegend()
+  ggsave(paste0(outdir, sampleID, "_possClust_res1.6.pdf"), width = 5, height = 5)
+```
+
+# cluster overlap
+
+x = sample(1:5,10,replace=TRUE) # label from 1 to 5, 10 elements
+y = x                           # set two labels x and y equal
+mclustcomp(x,y)    
+
+```{r}
+library(mclustcomp)
+jaccard_table <- data.frame(x = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.2, 1.4, 1.6),
+           y = c(mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.0)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.0.1)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.0.2)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.0.3)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.0.4)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.0.5)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.0.6)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.0.7)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.0.8)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.0.9)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.1)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.1.2)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.1.4)), types = "jaccard")[1,2],
+mclustcomp(as.vector(unname(df.2$clusters_wholedataset)), as.vector(unname(df.2$integrated_snn_res.1.6)), types = "jaccard")[1,2]))
+```
+
+```{r}
+jaccard_table
+```
+
+
+
+There is a 1:1 correspondance between the (old) clusters and the (new) resolution 0.4 clusters
+
+```{r}
+  # assess clustering results with clustree
+  clust <- clustree(df.2, prefix = "integrated_snn_res.", node_colour = "sc3_stability")
+  clust
+  ggsave(plot = clust, file = paste0(outdir, sampleID, "_clustree.jpeg"), height = 12, width = 12)
+  # extract the stability values for the different resolutions
+  stability <- clust$data[,c("integrated_snn_res.", "sc3_stability")]
+  write.table(stability, file = paste0(outdir, "clustree_stability.txt"), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+  
+  # select the most stable clustering value
+  stability <- stability[stability$integrated_snn_res. %in% names(which(table(stability$integrated_snn_res.) > 1)), ]
+  stability.ave <- aggregate(as.numeric(stability$sc3_stability), list(stability$integrated_snn_res.), mean)
+  rownames(stability.ave) <- stability.ave$Group.1
+  stability.ave$Group.1 <- NULL
+  #row0 <- which(rownames(stability.ave) == "0")
+  #stability.ave.no0 <- stability.ave[2:nrow(stability.ave), , drop = FALSE]
+  bestres <- as.numeric(rownames(stability.ave)[which.max(stability.ave$x)])
+  stability.ave
+  
+  sink(paste0(outdir, sampleID, "_bestRes.txt"))
+  cat(paste0("the chosen most stable resolution parameter is ", bestres))
+  sink()
+  
+  # re-run the clustering for df with the most stable value
+  rm(df.2)
+  df <- FindClusters(df, resolution = bestres)
+  DimPlot(df, reduction = "umap") + ggtitle(paste0("res = ", bestres))
+  ggsave(paste0(outdir, sampleID, "_chosenClust_res", bestres, ".jpeg"))
+```
+
+```{r}
+df[["clusters_wholedataset"]] <- droplevels(df[["clusters_wholedataset"]])
+table(df[[c("clusters_wholedataset", "integrated_snn_res.0.2")]])
+```
+
+
+# Find markers
+
+## new clusters
+
+```{r}
+# for each cluster separately
+DefaultAssay(df) <- "RNA"
+Idents(df) <- "integrated_snn_res.0.2"
+df.markers <- FindAllMarkers(df, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+top10 <- df.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.table(df.markers, file = paste0(outdir, "newclust_res", bestres, "markers.txt"), quote = FALSE, col.names = NA, sep = "\t")
+write.table(top10, file = paste0(outdir, "newclust_res", bestres, "markers_top10.txt"), quote = FALSE, col.names = NA, sep = "\t")
+```
+
+```{r}
+FeaturePlot(df, order = TRUE, features = c("C1QA", "C1QB", "C1QC"))
+```
+
+```{r}
+saveRDS(df, file = paste0(outdir_obj, "ReplotUMAP_Seurat.RDS"))
+```
+

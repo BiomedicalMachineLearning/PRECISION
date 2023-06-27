@@ -1,0 +1,299 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+```
+
+
+```{r}
+df <- readRDS("/scripts/17_MetacellVehicleOnly/vehicle_subtypes/11.1a_ReplotUMAP/CD4_Tcells/out_obj/ReplotUMAP_Seurat.RDS")
+
+outdir <- "/scripts/0_Figures/Fig_scRNAseq_allCells/Panels/Fig1B_UMAP/PlotVehicleSubclusters/Tcells_CD4/outdir/"
+
+Idents(df) <- "clusters_wholedataset"
+```
+
+```{r}
+# cluster-to-celltype conversions: /scripts/11c_Rerun_integrated_clusterMarkers/ClusterMarkers.pptx #slide 6
+palette_clust = c(
+            # T cells
+            `0` = "gold", #CD4
+            `1` = "orangered", #Treg
+            `3` = "deeppink2", #naive_CD8
+            `4` = "darkorchid4", #mem_CD8
+            `5` = "chocolate1", #naive_CD4
+            # B cells
+            `2` = "peachpuff4", #naive_memB 1+2 (1)
+            `8` = "peru", #naive_memB 1+2 (2)
+            # NKT
+            `6` = "limegreen", #NKT_DC
+            `7` = "forestgreen", #NKT_B & NKT_DC
+            # other
+            `9` = "darkturquoise", #basophil
+            `10` = "navyblue") #neutrophil
+```
+
+```{r}
+# palette_name = c(
+#             # T cells
+#             `CD4` = "gold", #CD4 = 0
+#             `naive_CD4` = "chocolate1", #naive_CD4 = 7
+#             `Treg` = "orangered", #Treg = 1
+#             `mem_CD8` = "darkorchid4", #mem_CD8 = 6
+#             `naive_CD8_1` = "deeppink2", #naive_CD8_1 = 4
+#             `naive_CD8_2` = "violet", #naive_CD8_2 = 2
+#             # B cells
+#             
+#             `naive_memB_1` = "peru", #naive_memB_1 = 5
+#             `naive_memB_2` = "peachpuff4", #naive_memB_2 = 3
+#             # NKT
+#             `NKT_DC` = "limegreen", #NKT_DC = 8
+#             `NKT` = "forestgreen", #NKT = 12
+#             `NKT_B` = "gold4", #NKT_B = 13
+#             # other
+#             `new` = "saddlebrown", #new = 9
+#             `basophil` = "darkturquoise", #basophil = 10
+#             `neutrophil` = "navyblue" #neutrophil = 11
+#               )
+
+
+# `2` = "violet", #naive_CD8_2
+#`9` = "saddlebrown", #new
+#`12` = "forestgreen", #NKT
+```
+
+```{r fig.height=10, fig.width=10}
+plot <- DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, shuffle = TRUE)
+
+xrange <- ggplot_build(plot)$layout$panel_scales_x[[1]]$range$range
+yrange <- ggplot_build(plot)$layout$panel_scales_y[[1]]$range$range
+
+# get legend
+mylegend <- get_legend(plot)
+mylegend <- as_ggplot(mylegend)
+ggsave(plot = mylegend, filename = paste0(outdir, "clusters_dimplot_legend.pdf"))
+
+
+# plot without legend
+plot +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot.pdf"), width = 4, height = 4)
+
+DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, label = TRUE, shuffle = TRUE) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_labelClusters.pdf"), width = 4, height = 4)
+
+```
+
+```{r fig.height=10, fig.width=10}
+plot2 <- DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, pt.size = 3, shuffle = TRUE)
+plot2 +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "dimplot_fatpoints_sml.png"), width = 4, height = 4)
+```
+
+# split by drug
+
+```{r fig.height=10, fig.width=10}
+# cells_ivig <- names(which(df$drug == "ivig"))
+# cells_veh <- names(which(df$drug == "veh"))
+# 
+# DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_ivig, pt.size = 0.5, shuffle = TRUE) +
+#   NoLegend() +
+#   coord_fixed() +
+#   theme(title=element_text(size = 0),
+#         axis.title=element_blank(),
+#         axis.text=element_blank(),
+#         axis.ticks=element_blank())
+# ggsave(filename = paste0(outdir, "clusters_dimplot_ivigOnly.pdf"), width = 4, height = 4)
+# 
+# DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_veh, pt.size = 0.5, shuffle = TRUE) +
+#   NoLegend() +
+#   coord_fixed() +
+#   theme(title=element_text(size = 0),
+#         axis.title=element_blank(),
+#         axis.text=element_blank(),
+#         axis.ticks=element_blank())
+# ggsave(filename = paste0(outdir, "clusters_dimplot_vehOnly.pdf"), width = 4, height = 4)
+```
+
+# split by SCI status only
+
+```{r fig.height=10, fig.width=10}
+cells_sham <- names(which(df$injury == "sham"))
+cells_naive <- names(which(df$injury == "naive"))
+cells_SCI <- names(which(df$injury == "SCI"))
+
+DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_sham, pt.size = 0.5, shuffle = TRUE) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_shamOnly.pdf"), width = 4, height = 4)
+
+DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_naive, pt.size = 0.5, shuffle = TRUE) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_naiveOnly.pdf"), width = 4, height = 4)
+
+DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_SCI, pt.size = 0.5) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_SCIOnly.pdf"), width = 4, height = 4)
+```
+
+# split by tissue only
+
+```{r fig.height=10, fig.width=10}
+cells_blood <- names(which(df$tissue == "blood"))
+cells_cord <- names(which(df$tissue == "cord"))
+
+DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_blood, pt.size = 0.5, shuffle = TRUE) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_bloodmOnly.pdf"), width = 4, height = 4)
+
+DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_cord, pt.size = 0.5, shuffle = TRUE) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_cordOnly.pdf"), width = 4, height = 4)
+```
+
+# split by sample only
+
+```{r fig.height=10, fig.width=10}
+cells_B1 <- names(which(df$file == "B1"))
+cells_B2 <- names(which(df$file == "B2"))
+cells_B3 <- names(which(df$file == "B3"))
+cells_B4 <- names(which(df$file == "B4"))
+cells_C2 <- names(which(df$file == "C2"))
+cells_C3 <- names(which(df$file == "C3"))
+
+DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_B1, pt.size = 0.5, shuffle = TRUE) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_B1sham.pdf"), width = 4, height = 4)
+
+DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_B2, pt.size = 0.5, shuffle = TRUE) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_B2veh.pdf"), width = 4, height = 4)
+
+# DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_B3, pt.size = 0.5, shuffle = TRUE) +
+#   NoLegend() +
+#   coord_fixed() +
+#   theme(title=element_text(size = 0),
+#         axis.title=element_blank(),
+#         axis.text=element_blank(),
+#         axis.ticks=element_blank())
+# ggsave(filename = paste0(outdir, "clusters_dimplot_B3ivig.pdf"), width = 4, height = 4)
+
+DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_B4, pt.size = 0.5, shuffle = TRUE) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_B4naive.pdf"), width = 4, height = 4)
+
+DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_C2, pt.size = 0.5, shuffle = TRUE) +
+  NoLegend() +
+  coord_fixed() +
+  theme(title=element_text(size = 0),
+        axis.title=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank())
+ggsave(filename = paste0(outdir, "clusters_dimplot_C2veh.pdf"), width = 4, height = 4)
+
+# DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_C3, pt.size = 0.5, shuffle = TRUE) +
+#   NoLegend() +
+#   coord_fixed() +
+#   theme(title=element_text(size = 0),
+#         axis.title=element_blank(),
+#         axis.text=element_blank(),
+#         axis.ticks=element_blank())
+# ggsave(filename = paste0(outdir, "clusters_dimplot_C3ivig.pdf"), width = 4, height = 4)
+```
+
+```{r fig.height=10, fig.width=10}
+# cells_sci_bloodIVIGveh <- names(which(df$sample == "blood_SCI_veh" | df$sample == "blood_SCI_ivig"))
+# cells_sci_veh <- names(which(df$sample == "blood_SCI_veh" | df$sample == "cord_SCI_veh"))
+# cells_sci_ivig <- names(which(df$sample == "blood_SCI_ivig" | df$sample == "cord_SCI_ivig"))
+# 
+# DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_sci_bloodIVIGveh, pt.size = 0.5, shuffle = TRUE) +
+#   NoLegend() +
+#   coord_fixed() +
+#   theme(title=element_text(size = 0),
+#         axis.title=element_blank(),
+#         axis.text=element_blank(),
+#         axis.ticks=element_blank())
+# ggsave(filename = paste0(outdir, "clusters_dimplot_blood_ivig+veh.pdf"), width = 4, height = 4)
+# 
+# 
+# DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_sci_veh, pt.size = 0.5, shuffle = TRUE) +
+#   NoLegend() +
+#   coord_fixed() +
+#   theme(title=element_text(size = 0),
+#         axis.title=element_blank(),
+#         axis.text=element_blank(),
+#         axis.ticks=element_blank())
+# ggsave(filename = paste0(outdir, "clusters_dimplot_veh_blood+cord.pdf"), width = 4, height = 4)
+# 
+# DimPlot(df, group.by = "clusters_wholedataset", cols = palette_clust, cells = cells_sci_ivig, pt.size = 0.5, shuffle = TRUE) +
+#   NoLegend() +
+#   coord_fixed() +
+#   theme(title=element_text(size = 0),
+#         axis.title=element_blank(),
+#         axis.text=element_blank(),
+#         axis.ticks=element_blank())
+# ggsave(filename = paste0(outdir, "clusters_dimplot_ivig_blood+cord.pdf"), width = 4, height = 4)
+```

@@ -1,0 +1,39 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Samplewise/outdir/"
+sampleID <- "4.2vs4.3"
+comp_4.2 <- read.delim("/scripts/13b_ProcessForGO/Samplewise/outdir/4.2_bloodVScord_veh_Markers.txt")
+comp_4.3 <- read.delim("/scripts/13b_ProcessForGO/Samplewise/outdir/4.3_bloodVScord_ivig_Markers.txt")
+sampleID <- "4.2v4.3_ivigonly"
+```
+
+```{r}
+ProcessOverlaps_ivig <- function(mycluster) {
+  comp_4.2_filt <- comp_4.2 %>% filter(cluster == mycluster)
+  comp_4.3_filt <- comp_4.3 %>% filter(cluster == mycluster)
+  only_ivig <- setdiff(comp_4.3_filt$gene, comp_4.2_filt$gene)
+  overlap_table <- data.frame(gene = only_ivig, cluster = rep(mycluster, length(only_ivig)))
+  return(overlap_table)
+}
+```
+
+```{r}
+all_clusters <- unique(c(comp_4.2$cluster, comp_4.3$cluster))
+df_all <- lapply(all_clusters, ProcessOverlaps_ivig) %>% bind_rows()
+write.table(df_all, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers_ivigOnly.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+
+# remove Rb/Mt
+
+```{r}
+df_all_filt <- df_all[grep("^MT-|^RPS|^RPL", df_all$gene, invert = TRUE),]
+write.table(df_all_filt, file = paste0(outdir, sampleID, "_ComparisonVenn_Markers_RemoveRbMt_ivigOnly.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```

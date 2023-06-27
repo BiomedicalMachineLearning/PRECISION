@@ -1,0 +1,527 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+Map cell calls to the network diagram.
+
+```{r}
+library("metacell")
+library("Seurat")
+library("ggplot2")
+library("RColorBrewer")
+library("randomcoloR")
+library("dplyr")
+library("ggpubr")
+```
+
+
+```{r}
+sampleID <- "vehicle"
+df <- readRDS("/scripts/17_Metacell/vehicle/11.1_ExtractClusters/out/vehicle_subset.RDS")
+outdir_metacell <- "/scripts/17_Metacell/vehicle/11.3_RunMetacell/out_obj/"
+recolour_outdir <- "/scripts/17_Metacell/vehicle/11.4_colouriseNetwork/outdir/"
+Idents(df) <- "integrated_snn_res.0.4"
+```
+
+```{r}
+# the annotations have "-1" but the df doesn't. Remove the -1
+#annotations2 <- annotations
+#rownames(annotations2) <- gsub("\\-.*","",rownames(annotations2))
+#df <- AddMetaData(df, annotations2)
+```
+
+```{r}
+# ------------------------------------------------------------------
+# RELOAD THE DATA
+# ------------------------------------------------------------------
+
+print(paste0("Log 1: Preparing the data for MC sample ", sampleID, " at ", date()))
+
+#' # Reload the data
+scdb_init(outdir_metacell, force_reinit = T)
+scfigs_init(recolour_outdir)
+
+#' Change the ID so that I can re-run graphs without over-writing the old ones
+mc_play = scdb_mc("test_mc_f")
+scdb_add_mc("playing", mc_play)
+
+# ------------------------------------------------------------------
+# PREPARE THE ANNOTATIONS
+# ------------------------------------------------------------------
+
+print(paste0("Log 2: Preparing the annotations for MC sample ", sampleID, " at ", date()))
+
+#' # Make an annotation table containing the data
+# first get the order of cells we need to colour
+mc2d = scdb_mc2d("test_2dproj")
+cellnames <- names(mc2d@sc_x)
+mc = scdb_mc(mc2d@mc_id)
+```
+
+```{r}
+# NOTE: change to necessary cluster ID
+# get the cellID-to-cluster conversion, and filter it so it is the same length and order as the cellID-to-metacell conversion
+clusterannotations <- df[[c("integrated_snn_res.0.4", "tissue", "injury", "sample")]]
+# for "greyed out" columns, need to also concatenate integrated_snn_res.0.4 with timestate
+clusterannotations$cell <- rownames(clusterannotations)
+clusterannotations <- mutate(clusterannotations, callbysample = paste0(integrated_snn_res.0.4, "_", sample))
+rownames(clusterannotations) <- clusterannotations$cell
+clusterannotations$cell <- NULL
+clusterannotations <-clusterannotations[cellnames, , drop = FALSE]
+
+# get the node and edge data
+fr = mc2d@graph$mc1
+to = mc2d@graph$mc2
+
+# ------------------------------------------------------------------
+# BUILD THE GRAPH
+# ------------------------------------------------------------------
+
+print(paste0("Log 3: Building the graph for MC sample ", sampleID, " at ", date()))
+
+#' # Build the plot in ggplot2
+# first need to merge all the data into a table
+networkdata <- cbind(as.data.frame(mc2d@sc_x), as.data.frame(mc2d@sc_y), clusterannotations)
+colnames(networkdata) <- c("mc2d_xval", "mc2d_yval", "integrated_snn_res.0.4", "tissue", "injury", "sample", "callbysample")
+#remove metacell data absent in the seurat call list
+networkdata <- networkdata[which(!is.na(networkdata$integrated_snn_res.0.4)),]
+```
+
+```{r}
+#blues <- c("#567374", "#293892", "#3876A9", "#3A8DA9", "#52B7DA", "#B4DDF6", "#88D3DE", "#65C7C3")
+#palette <- blues[c(7,3,6,1,5,2)] #gives the correct order based on the order from my DimPlot
+#1,2,5,6,11,15,DC
+palette_clust = c(
+            # T cells
+            `0` = "gold", #CD4
+            `1` = "orangered", #Treg
+            `3` = "deeppink2", #naive_CD8
+            `4` = "darkorchid4", #mem_CD8
+            `5` = "chocolate1", #naive_CD4
+            # B cells
+            `2` = "peachpuff4", #naive_memB 1+2 (1)
+            `8` = "peru", #naive_memB 1+2 (2)
+            # NKT
+            `6` = "limegreen", #NKT_DC
+            `7` = "forestgreen", #NKT_B & NKT_DC
+            # other
+            `9` = "darkturquoise", #basophil
+            `10` = "navyblue") #neutrophil
+
+palette_tissue = c(
+            # T cells
+            `blood` = "#AA413C",
+            `cord` = "#3374A3")
+
+palette_sample = c(`blood_SCI_veh` = "#3C0D03",
+                    `blood_sham_veh` = "#EC9543",
+                   `blood_naive_veh` = "#F3C34D",
+                   `cord_SCI_veh` = "#0A3351")
+
+palette_injury = c(`sham` = "#54C2CC",
+                   `SCI` = "#20525C",
+                   `naive` = "#DFE667")
+```
+
+# Plot the seurat data first
+clusterannotations <- df[[c("integrated_snn_res.0.4", "tissue", "injurydrug", "sample")]]
+
+
+```{r}
+# Colour by cluster
+DimPlot(df, cols = palette_clust, group.by = "integrated_snn_res.0.4")
+ggsave(paste0(recolour_outdir, sampleID, "_cluster_dimplot.pdf"), width = 6, height = 6)
+DimPlot(df, cols = palette_clust, label = TRUE, group.by = "integrated_snn_res.0.4")
+ggsave(paste0(recolour_outdir, sampleID, "_cluster_dimplot_labels.pdf"), width = 6, height = 6)
+# Colour by tissue
+DimPlot(df, group.by = "tissue", cols = palette_tissue)
+ggsave(paste0(recolour_outdir, sampleID, "_tissue_dimplot.pdf"), width = 6, height = 6)
+
+data <- DimPlot(df, split.by = "tissue", cols = palette_tissue)
+phasedata <- as.data.frame(table(data$data[,c(3:4)]))
+ggplot(phasedata, aes(fill=tissue, y=Freq, x=ident)) + 
+  geom_bar(position="fill", stat="identity") +
+  scale_fill_manual(values = palette_tissue)
+ggsave(paste0(recolour_outdir, sampleID, "_tissue_barplot.pdf"))
+
+# Colour by injurydrug
+DimPlot(df, group.by = "injury", cols = palette_injury)
+ggsave(paste0(recolour_outdir, sampleID, "_injury_dimplot.pdf"), width = 6, height = 6)
+
+data <- DimPlot(df, split.by = "injury", cols = palette_injury)
+phasedata <- as.data.frame(table(data$data[,c(3:4)]))
+ggplot(phasedata, aes(fill=injury, y=Freq, x=ident)) + 
+  geom_bar(position="fill", stat="identity") +
+  scale_fill_manual(values = palette_injury)
+ggsave(paste0(recolour_outdir, sampleID, "_injury_barplot.pdf"))
+
+# Colour by sample
+DimPlot(df, cols = palette_sample, group.by = "sample")
+ggsave(paste0(recolour_outdir, sampleID, "_sample_dimplot.pdf"), width = 6, height = 6)
+
+data <- DimPlot(df, split.by = "sample", cols = palette_sample)
+sampledata <- as.data.frame(table(data$data[,c(3:4)]))
+ggplot(sampledata, aes(fill=sample, y=Freq, x=ident)) + 
+  geom_bar(position="fill", stat="identity") +
+  scale_fill_manual(values = palette_sample)
+ggsave(paste0(recolour_outdir, sampleID, "_sample_barplot.pdf"))
+```
+
+# Plot all together, coloured by cluster
+
+```{r fig.height=3, fig.width=3}
+plot_all <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, fill=networkdata$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 2) +
+  #geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 2.5) +
+  theme_void() +
+  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_clusters.pdf"), width = 6, height = 6)
+plot_all
+
+#legend
+ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, fill=networkdata$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 2) +
+  #geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 2.5) +
+  theme_void()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_clusters_legend.pdf"), width = 6, height = 6)
+```
+
+# Plot each cluster separately
+
+```{r}
+# subset by time
+networkdata_c0 <- subset(networkdata, integrated_snn_res.0.4 == "0")
+networkdata_c1 <- subset(networkdata, integrated_snn_res.0.4 == "1")
+networkdata_c2 <- subset(networkdata, integrated_snn_res.0.4 == "2")
+networkdata_c3 <- subset(networkdata, integrated_snn_res.0.4 == "3")
+networkdata_c4 <- subset(networkdata, integrated_snn_res.0.4 == "4")
+networkdata_c5 <- subset(networkdata, integrated_snn_res.0.4 == "5")
+networkdata_c6 <- subset(networkdata, integrated_snn_res.0.4 == "6")
+networkdata_c7 <- subset(networkdata, integrated_snn_res.0.4 == "7")
+networkdata_c8 <- subset(networkdata, integrated_snn_res.0.4 == "8")
+networkdata_c9 <- subset(networkdata, integrated_snn_res.0.4 == "9")
+networkdata_c10 <- subset(networkdata, integrated_snn_res.0.4 == "10")
+#networkdata_c11 <- subset(networkdata, integrated_snn_res.0.4 == "11")
+```
+
+```{r}
+# cluster 0
+plot_c0 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c0$mc2d_xval, y=networkdata_c0$mc2d_yval, fill=networkdata_c0$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c0 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster0.pdf"), width = 6, height = 6)
+
+# cluster 1
+plot_c1 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c1$mc2d_xval, y=networkdata_c1$mc2d_yval, fill=networkdata_c1$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c1 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster1.pdf"), width = 6, height = 6)
+
+# cluster 2
+plot_c2 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c2$mc2d_xval, y=networkdata_c2$mc2d_yval, fill=networkdata_c2$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c2 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster2.pdf"), width = 6, height = 6)
+
+# cluster 3
+plot_c3 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c3$mc2d_xval, y=networkdata_c3$mc2d_yval, fill=networkdata_c3$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c3 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster3.pdf"), width = 6, height = 6)
+
+# cluster 4
+plot_c4 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c4$mc2d_xval, y=networkdata_c4$mc2d_yval, fill=networkdata_c4$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c4 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster4.pdf"), width = 6, height = 6)
+
+# cluster 5
+plot_c5 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c5$mc2d_xval, y=networkdata_c5$mc2d_yval, fill=networkdata_c5$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c5 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster5.pdf"), width = 6, height = 6)
+
+# cluster 6
+plot_c6 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c6$mc2d_xval, y=networkdata_c6$mc2d_yval, fill=networkdata_c6$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c6 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster6.pdf"), width = 6, height = 6)
+
+# cluster 7
+plot_c7 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c7$mc2d_xval, y=networkdata_c7$mc2d_yval, fill=networkdata_c7$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c7 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster7.pdf"), width = 6, height = 6)
+
+# cluster8
+plot_c8 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c8$mc2d_xval, y=networkdata_c8$mc2d_yval, fill=networkdata_c8$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c8 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster8.pdf"), width = 6, height = 6)
+
+# cluster9
+plot_c9 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c9$mc2d_xval, y=networkdata_c9$mc2d_yval, fill=networkdata_c9$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c9 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster9.pdf"), width = 6, height = 6)
+
+# cluster 10
+plot_c10 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$integrated_snn_res.0.4), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_c10$mc2d_xval, y=networkdata_c10$mc2d_yval, fill=networkdata_c10$integrated_snn_res.0.4), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_clust) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_c10 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cluster10.pdf"), width = 6, height = 6)
+```
+
+# Group by tissue
+
+```{r}
+plot_all <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, fill=networkdata$tissue), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_tissue) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 2) +
+  #geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 2.5) +
+  theme_void() +
+  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_tissue.pdf"), width = 6, height = 6)
+plot_all
+
+ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, fill=networkdata$tissue), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_tissue) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 2) +
+  #geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 2.5) +
+  theme_void()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_tissue_legend.pdf"), width = 6, height = 6)
+```
+
+# Plot by sample
+
+
+```{r}
+plot_all <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, fill=networkdata$sample), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_sample) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 2) +
+  #geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 2.5) +
+  theme_void() +
+  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_sample.pdf"), width = 6, height = 6)
+plot_all
+
+ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, fill=networkdata$sample), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_sample) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 2) +
+  #geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 2.5) +
+  theme_void()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_sample_legend.pdf"), width = 6, height = 6)
+```
+
+# Plot each sample separately
+
+```{r}
+# subset by time
+networkdata_B1 <- subset(networkdata, sample == "blood_sham_veh")
+networkdata_B2 <- subset(networkdata, sample == "blood_SCI_veh")
+networkdata_B3 <- subset(networkdata, sample == "blood_naive_veh")
+networkdata_B4 <- subset(networkdata, sample == "cord_SCI_veh")
+```
+
+```{r}
+# sample B1
+plot_B1 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$sample), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_B1$mc2d_xval, y=networkdata_B1$mc2d_yval, fill=networkdata_B1$sample), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_sample) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_B1 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_blood_sham_veh.pdf"), width = 6, height = 6)
+
+# sample B2
+plot_B2 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$sample), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_B2$mc2d_xval, y=networkdata_B2$mc2d_yval, fill=networkdata_B2$sample), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_sample) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_B2 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_blood_SCI_veh.pdf"), width = 6, height = 6)
+
+# sample B3
+plot_B3 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$sample), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_B3$mc2d_xval, y=networkdata_B3$mc2d_yval, fill=networkdata_B3$sample), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_sample) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_B3 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_blood_naive_veh.pdf"), width = 6, height = 6)
+
+# sample B4
+plot_B4 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$sample), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_B4$mc2d_xval, y=networkdata_B4$mc2d_yval, fill=networkdata_B4$sample), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_sample) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_B4 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_cord_SCI_veh.pdf"), width = 6, height = 6)
+
+```
+
+# Plot injury
+
+```{r}
+plot_all <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, fill=networkdata$injury), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_injury) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 2) +
+  #geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 2.5) +
+  theme_void() +
+  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_injury.pdf"), width = 6, height = 6)
+plot_all
+
+ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, fill=networkdata$injury), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_injury) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 2) +
+  #geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 2.5) +
+  theme_void()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_injury_legend.pdf"), width = 6, height = 6)
+
+```
+
+# Plot each injury separately
+
+```{r}
+# subset by time
+networkdata_I1 <- subset(networkdata, injury == "sham")
+networkdata_I2 <- subset(networkdata, injury == "SCI")
+networkdata_I3 <- subset(networkdata, injury == "naive")
+```
+
+```{r}
+# sample I1
+plot_I1 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$injury), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_I1$mc2d_xval, y=networkdata_I1$mc2d_yval, fill=networkdata_I1$injury), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_injury) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_I1 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_sham.pdf"), width = 6, height = 6)
+
+# sample I2
+plot_I2 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$injury), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_I2$mc2d_xval, y=networkdata_I2$mc2d_yval, fill=networkdata_I2$injury), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_injury) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_I2 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_SCI.pdf"), width = 6, height = 6)
+
+# sample I3
+plot_I3 <- ggplot() + 
+  geom_point(aes(x=networkdata$mc2d_xval, y=networkdata$mc2d_yval, color=networkdata$injury), size = 0.5, col = "grey75") +
+  geom_point(aes(x=networkdata_I3$mc2d_xval, y=networkdata_I3$mc2d_yval, fill=networkdata_I3$injury), size = 2, shape = 21, color = "black", stroke = 0.05) +
+  scale_fill_manual(values = palette_injury) +
+  geom_segment(aes(x = mc2d@mc_x[fr], y = mc2d@mc_y[fr], xend = mc2d@mc_x[to], yend = mc2d@mc_y[to]), col = "gray25", size = 0.3) +
+  geom_point(aes(x = mc2d@mc_x, y = mc2d@mc_y), shape = 21, fill = "white", color = "black", size = 4) +
+  geom_text(aes(x = mc2d@mc_x, y = mc2d@mc_y, label = 1:length(mc2d@mc_x)), size = 1.5) +
+  theme_void()
+plot_I3 +  NoLegend()
+ggsave(filename = paste0(recolour_outdir, sampleID, "_networkdiagram_naive.pdf"), width = 6, height = 6)
+```

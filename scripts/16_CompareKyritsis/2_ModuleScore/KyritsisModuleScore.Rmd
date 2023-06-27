@@ -1,0 +1,408 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+inhouse <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+Idents(inhouse) <- "integrated_snn_res.0.4"
+DefaultAssay(inhouse) <- "RNA"
+outdir <- "/scripts/16_CompareKyritsis/2_ModuleScore/outdir/"
+```
+
+# A simple example of how module score works
+
+```{r}
+DimPlot(inhouse, label = TRUE)
+```
+```{r}
+markers <- FindMarkers(inhouse, ident.1 = 6)
+markers <- markers %>% filter(avg_log2FC > 0) %>% filter(p_val_adj <= 0.05)
+top20 <- markers %>% filter(p_val_adj <= 0.05) %>% arrange(-(avg_log2FC)) %>% dplyr::slice(1:20, with_ties = FALSE)
+top20 <- rownames(top20)
+list_top20 <- list(top20)
+inhouse <- AddModuleScore(inhouse, features = list_top20, assay = "RNA", name = "test_nkt")
+FeaturePlot(inhouse, features = "test_nkt1", order = TRUE)
+```
+
+
+# Plot the data
+
+```{r}
+DimPlot(inhouse)
+```
+# Calculate Kyritsis module scores for Table S2
+
+Kyritsis paper is here: `/scripts/16_CompareKyritsis/Paper/jem_20201795.pdf`
+
+Which supp data files do they provide?
+
+Table S2: Genes that change with injury severity. I have reformatted it from a Word document to a .txt file
+
+```{r}
+# load the data
+goi <- read.delim("/scripts/16_CompareKyritsis/Paper/TableS2_reformat.txt")
+up <- goi %>% filter(Direction == "Up") %>% pull(Gene)
+down <- goi %>% filter(Direction == "Down") %>% pull(Gene)
+
+# comparison gene set
+inhouse_degs <- read.delim("/scripts/13_DEG/AllCellsTogether/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/markers_SCIvnaive_RemoveRbMt_top100.txt") #genes that are different between SCI and naive in our dataset, across all clusters
+```
+
+```{r}
+# confirm the genes are present in the data
+table(up %in% rownames(inhouse))
+table(down %in% rownames(inhouse))
+# which genes are missing
+up[!(up %in% rownames(inhouse))]
+down[!(down %in% rownames(inhouse))]
+```
+
+
+```{r}
+up <- list(up)
+down <- list(down)
+up_inhouse <- list(inhouse_degs %>% filter(direction == "up") %>% pull(gene))
+```
+
+```{r}
+inhouse <- AddModuleScore(inhouse, features = up, assay = "RNA", name = "score_upreg")
+inhouse <- AddModuleScore(inhouse, features = down, assay = "RNA", name = "score_downreg")
+inhouse <- AddModuleScore(inhouse, features = up_inhouse, assay = "RNA", name = "score_inhouseSCI")
+```
+
+```{r}
+FeaturePlot(inhouse, features = "score_upreg1", order = TRUE)
+FeaturePlot(inhouse, features = "score_downreg1", order = TRUE)
+```
+
+```{r}
+FeaturePlot(inhouse, features = "score_upreg1", order = TRUE)
+ggsave(filename = paste0(outdir, "feature_up_clust.pdf"), width = 5, height = 5)
+FeaturePlot(inhouse, features = "score_downreg1", order = TRUE)
+ggsave(filename = paste0(outdir, "feature_down_clust.pdf"), width = 5, height = 5)
+FeaturePlot(inhouse, features = "score_inhouseSCI1", order = TRUE)
+ggsave(filename = paste0(outdir, "feature_inhouse_clust.pdf"), width = 5, height = 5)
+
+FeaturePlot(inhouse, features = "score_upreg1", order = TRUE, split.by = "sample")
+ggsave(filename = paste0(outdir, "feature_up_sample.pdf"), width = 18, height = 3)
+FeaturePlot(inhouse, features = "score_downreg1", order = TRUE, split.by = "sample")
+ggsave(filename = paste0(outdir, "feature_down_sample.pdf"), width = 18, height = 3)
+
+FeaturePlot(inhouse, features = "score_upreg1", order = TRUE, split.by = "injury")
+ggsave(filename = paste0(outdir, "feature_up_injury.pdf"), width = 15, height = 5)
+FeaturePlot(inhouse, features = "score_downreg1", order = TRUE, split.by = "injury")
+ggsave(filename = paste0(outdir, "feature_down_injury.pdf"), width = 15, height = 5)
+
+FeaturePlot(inhouse, features = "score_upreg1", order = TRUE, split.by = "tissue")
+ggsave(filename = paste0(outdir, "feature_up_tissue.pdf"), width = 10, height = 5)
+FeaturePlot(inhouse, features = "score_downreg1", order = TRUE, split.by = "tissue")
+ggsave(filename = paste0(outdir, "feature_down_tissue.pdf"), width = 10, height = 5)
+
+FeaturePlot(inhouse, features = "score_upreg1", order = TRUE, split.by = "drug")
+ggsave(filename = paste0(outdir, "feature_up_drug.pdf"), width = 10, height = 5)
+FeaturePlot(inhouse, features = "score_downreg1", order = TRUE, split.by = "drug")
+ggsave(filename = paste0(outdir, "feature_down_drug.pdf"), width = 10, height = 5)
+
+FeaturePlot(inhouse, features = "score_upreg1", order = TRUE, split.by = "injurydrug")
+ggsave(filename = paste0(outdir, "feature_up_injurydrug.pdf"), width = 16, height = 4)
+FeaturePlot(inhouse, features = "score_downreg1", order = TRUE, split.by = "injurydrug")
+ggsave(filename = paste0(outdir, "feature_down_injurydrug.pdf"), width = 16, height = 4)
+```
+
+```{r}
+VlnPlot(inhouse, features = "score_upreg1")
+ggsave(filename = paste0(outdir, "vln_up_clust.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_downreg1")
+ggsave(filename = paste0(outdir, "vln_down_clust.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1")
+ggsave(filename = paste0(outdir, "vln_inhouse_clust.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "score_upreg1", group.by = "sample")
+ggsave(filename = paste0(outdir, "vln_up_sample.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_downreg1", group.by = "sample")
+ggsave(filename = paste0(outdir, "vln_down_sample.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1", group.by = "sample")
+ggsave(filename = paste0(outdir, "vln_inhouse_sample.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "score_upreg1", group.by = "injury")
+ggsave(filename = paste0(outdir, "vln_up_injury.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_downreg1", group.by = "injury")
+ggsave(filename = paste0(outdir, "vln_down_injury.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1", group.by = "injury")
+ggsave(filename = paste0(outdir, "vln_inhouse_injury.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "score_upreg1", group.by = "tissue")
+ggsave(filename = paste0(outdir, "vln_up_tissue.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_downreg1", group.by = "tissue")
+ggsave(filename = paste0(outdir, "vln_down_tissue.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1", group.by = "tissue")
+ggsave(filename = paste0(outdir, "vln_inhouse_tissue.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "score_upreg1", group.by = "drug")
+ggsave(filename = paste0(outdir, "vln_up_drug.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_downreg1", group.by = "drug")
+ggsave(filename = paste0(outdir, "vln_down_drug.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1", group.by = "drug")
+ggsave(filename = paste0(outdir, "vln_inhouse_drug.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "score_upreg1", group.by = "injurydrug")
+ggsave(filename = paste0(outdir, "vln_up_injurydrug.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_downreg1", group.by = "injurydrug")
+ggsave(filename = paste0(outdir, "vln_down_injurydrug.pdf"), width = 5, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1", group.by = "injurydrug")
+ggsave(filename = paste0(outdir, "vln_inhouse_injurydrug.pdf"), width = 5, height = 5)
+```
+
+```{r}
+VlnPlot(inhouse, features = "score_upreg1", split.by = "sample")
+ggsave(filename = paste0(outdir, "vlnBySample_up_sample.pdf"), width = 8, height = 5)
+VlnPlot(inhouse, features = "score_downreg1", split.by = "sample")
+ggsave(filename = paste0(outdir, "vlnBySample_down_sample.pdf"), width = 8, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1", split.by = "sample")
+ggsave(filename = paste0(outdir, "vlnBySample_inhouse_sample.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = "score_upreg1", split.by = "injury")
+ggsave(filename = paste0(outdir, "vlnBySample_up_injury.pdf"), width = 8, height = 5)
+VlnPlot(inhouse, features = "score_downreg1", split.by = "injury")
+ggsave(filename = paste0(outdir, "vlnBySample_down_injury.pdf"), width = 8, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1", split.by = "injury")
+ggsave(filename = paste0(outdir, "vlnBySample_inhouse_injury.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = "score_upreg1", split.by = "tissue")
+ggsave(filename = paste0(outdir, "vlnBySample_up_tissue.pdf"), width = 8, height = 5)
+VlnPlot(inhouse, features = "score_downreg1", split.by = "tissue")
+ggsave(filename = paste0(outdir, "vlnBySample_down_tissue.pdf"), width = 8, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1", split.by = "tissue")
+ggsave(filename = paste0(outdir, "vlnBySample_inhouse_tissue.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = "score_upreg1", split.by = "drug")
+ggsave(filename = paste0(outdir, "vlnBySample_up_drug.pdf"), width = 8, height = 5)
+VlnPlot(inhouse, features = "score_downreg1", split.by = "drug")
+ggsave(filename = paste0(outdir, "vlnBySample_down_drug.pdf"), width = 8, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1", split.by = "drug")
+ggsave(filename = paste0(outdir, "vlnBySample_inhouse_drug.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = "score_upreg1", split.by = "injurydrug")
+ggsave(filename = paste0(outdir, "vlnBySample_up_injurydrug.pdf"), width = 8, height = 5)
+VlnPlot(inhouse, features = "score_downreg1", split.by = "injurydrug")
+ggsave(filename = paste0(outdir, "vlnBySample_down_injurydrug.pdf"), width = 8, height = 5)
+VlnPlot(inhouse, features = "score_inhouseSCI1", split.by = "injurydrug")
+ggsave(filename = paste0(outdir, "vlnBySample_inhouse_injurydrug.pdf"), width = 8, height = 5)
+```
+
+# plot the scores for my "up_inhouse" list as a comparison
+
+```{r}
+
+```
+
+# Module 13
+
+```{r}
+mod13 <- list(c("TMED8",
+"GYG1",
+"ZNF438",
+"TMCO3",
+"YIPF1",
+"KLHL2",
+"ANXA3",
+"CYSTM1",
+"CLEC4D",
+"BMX",
+"ST6GALNAC3",
+"NLRC4",
+"S100A12",
+"RABGEF1",
+"SLC37A3"))
+
+inhouse <- AddModuleScore(inhouse, features = mod13, assay = "RNA", name = "module13")
+FeaturePlot(inhouse, features = "module131", order = TRUE)
+```
+```{r}
+VlnPlot(inhouse, features = "module131")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_clust.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "module131", group.by = "sample")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_sample.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "module131", group.by = "injury")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_injury.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "module131", group.by = "tissue")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_tissue.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "module131", group.by = "drug")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_drug.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "module131", group.by = "injurydrug")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_injurydrug.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = "module131", split.by = "sample")
+ggsave(filename = paste0(outdir, "vlnBySample_", sampleID, "_sample.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = "module131", split.by = "injury")
+ggsave(filename = paste0(outdir, "vlnBySample_", sampleID, "_injury.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = "module131", split.by = "tissue")
+ggsave(filename = paste0(outdir, "vlnBySample_", sampleID, "_tissue.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = "module131", split.by = "drug")
+ggsave(filename = paste0(outdir, "vlnBySample_", sampleID, "_drug.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = "module131", split.by = "injurydrug")
+ggsave(filename = paste0(outdir, "vlnBySample_", sampleID, "_injurydrug.pdf"), width = 8, height = 5)
+```
+
+```{r}
+mod12 <- list(c("MMP8",
+"LTF",
+"LCN2",
+"BPI",
+"ITGA9",
+"CRISP3",
+"CEACAM6",
+"CHIT1",
+"CEACAM8",
+"TCN1",
+"ERG",
+"MPO",
+"OLR1",
+"OLFM4",
+"RGL4"
+))
+
+mod1 <- list(c("FAM168B",
+"OTULIN",
+"TAF1",
+"HNRNPD",
+"HNRNPUL2",
+"QRICH1",
+"TRAPPC10",
+"TNRC6A",
+"SMARCA2",
+"RALGAPB",
+"TSPYL1",
+"SART3",
+"YLPM1",
+"NSD1",
+"USP7"
+))
+
+mod5 <- list(c("GOLGA3",
+"SMYD4",
+"NOL9",
+"EXOSC6",
+"MFATC2IP",
+"TNRC6CAS1",
+"PEX26",
+"POLH",
+"CYP20A1",
+"MRI1",
+"GNL3L",
+"FOXK1",
+"POU6F1",
+"NF2",
+"CNNM3"
+))
+
+mod10 <- list(c("HERC5",
+"IFIT3",
+"IFIH1",
+"PARK14",
+"IFIT2",
+"IFIT1",
+"STAT1",
+"XAF1",
+"NUB1",
+"GBP1",
+"IFI44L",
+"ZCCHC2",
+"DDX58",
+"HERC6",
+"SP140"
+))
+
+mod16 <- list(c("C14orf2",
+"TIMM8b",
+"COX5B",
+"COX7A2",
+"NDUFA1",
+"COX7B",
+"TMEM258",
+"SDHB",
+"MYL6",
+"COX6A1",
+"TXNDC17",
+"NDUFB1",
+"RNF181",
+"UQCR10",
+"PSMB3"
+))
+```
+
+```{r}
+inhouse <- AddModuleScore(inhouse, features = mod12, assay = "RNA", name = "module12_")
+inhouse <- AddModuleScore(inhouse, features = mod1, assay = "RNA", name = "module1_")
+inhouse <- AddModuleScore(inhouse, features = mod5, assay = "RNA", name = "module5_")
+inhouse <- AddModuleScore(inhouse, features = mod10, assay = "RNA", name = "module10_")
+inhouse <- AddModuleScore(inhouse, features = mod16, assay = "RNA", name = "module16_")
+
+FeaturePlot(inhouse, features = "module12_1", order = TRUE)
+FeaturePlot(inhouse, features = "module1_1", order = TRUE)
+FeaturePlot(inhouse, features = "module5_1", order = TRUE)
+FeaturePlot(inhouse, features = "module10_1", order = TRUE)
+FeaturePlot(inhouse, features = "module16_1", order = TRUE)
+```
+
+```{r}
+plotScores <- function(featureID, sampleID) {
+VlnPlot(inhouse, features = featureID)
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_clust.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = featureID, group.by = "sample")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_sample.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = featureID, group.by = "injury")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_injury.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = featureID, group.by = "tissue")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_tissue.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = featureID, group.by = "drug")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_drug.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = featureID, group.by = "injurydrug")
+ggsave(filename = paste0(outdir, "vln_", sampleID, "_injurydrug.pdf"), width = 5, height = 5)
+
+VlnPlot(inhouse, features = featureID, split.by = "sample")
+ggsave(filename = paste0(outdir, "vlnBySample_", sampleID, "_sample.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = featureID, split.by = "injury")
+ggsave(filename = paste0(outdir, "vlnBySample_", sampleID, "_injury.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = featureID, split.by = "tissue")
+ggsave(filename = paste0(outdir, "vlnBySample_", sampleID, "_tissue.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = featureID, split.by = "drug")
+ggsave(filename = paste0(outdir, "vlnBySample_", sampleID, "_drug.pdf"), width = 8, height = 5)
+
+VlnPlot(inhouse, features = featureID, split.by = "injurydrug")
+ggsave(filename = paste0(outdir, "vlnBySample_", sampleID, "_injurydrug.pdf"), width = 8, height = 5)
+}
+```
+
+```{r}
+plotScores("module1_1", "mod1")
+plotScores("module10_1", "mod10")
+plotScores("module12_1", "mod12")
+plotScores("module16_1", "mod16")
+plotScores("module5_1", "mod5")
+```
+

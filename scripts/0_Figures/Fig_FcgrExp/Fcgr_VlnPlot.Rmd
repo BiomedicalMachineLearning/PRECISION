@@ -1,0 +1,121 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+```
+
+
+```{r}
+df <- readRDS("/scripts/11b_RunClusteringRes0.4/out_obj/allintegratedClustered_Seurat2.RDS")
+
+outdir <- "/scripts/0_Figures/Fig_FcgrExp/outdir/"
+
+markers <- toupper(c("FCGR1A", "fcgr2a", "fcgr2b", "FCGR2C", "FCGR3A", "FCGR3B"))
+```
+
+# filter markers that are in the data
+
+```{r}
+markers <- markers[markers %in% rownames(df)]
+```
+
+# Plot dotplots for each clusters markers
+
+```{r}
+Idents(df) <- "integrated_snn_res.0.4"
+DefaultAssay(df) <- "RNA"
+```
+
+# subset the data
+
+```{r}
+blood_sham <- names(which(df$sample == "blood_sham_veh"))
+blood_veh <- names(which(df$sample == "blood_SCI_veh"))
+blood_ivig <- names(which(df$sample == "blood_SCI_ivig"))
+blood_naive <- names(which(df$sample == "blood_naive_veh"))
+cord_veh <- names(which(df$sample == "cord_SCI_veh"))
+cord_ivig <- names(which(df$sample == "cord_SCI_ivig"))
+
+blood_sham <- subset(df, cells = blood_sham)
+blood_veh <- subset(df, cells = blood_veh)
+blood_ivig <- subset(df, cells = blood_ivig)
+blood_naive <- subset(df, cells = blood_naive)
+cord_veh <- subset(df, cells = cord_veh)
+cord_ivig <- subset(df, cells = cord_ivig)
+```
+
+```{r}
+DotPlot(df, features = markers) + RotatedAxis()
+ggsave(filename = paste0(outdir, "fcgr_dotplot_alldata.pdf"))
+
+DotPlot(blood_sham, features = markers) + RotatedAxis()
+ggsave(filename = paste0(outdir, "fcgr_dotplot_", "blood_sham", ".pdf"))
+
+DotPlot(blood_veh, features = markers) + RotatedAxis()
+ggsave(filename = paste0(outdir, "fcgr_dotplot_", "blood_veh", ".pdf"))
+
+DotPlot(blood_ivig, features = markers) + RotatedAxis()
+ggsave(filename = paste0(outdir, "fcgr_dotplot_", "blood_ivig", ".pdf"))
+
+DotPlot(blood_naive, features = markers) + RotatedAxis()
+ggsave(filename = paste0(outdir, "fcgr_dotplot_", "blood_naive", ".pdf"))
+
+DotPlot(cord_veh, features = markers) + RotatedAxis()
+ggsave(filename = paste0(outdir, "fcgr_dotplot_", "cord_veh", ".pdf"))
+
+DotPlot(cord_ivig, features = markers) + RotatedAxis()
+ggsave(filename = paste0(outdir, "fcgr_dotplot_", "cord_ivig", ".pdf"))
+```
+
+# plot violin plot
+
+```{r}
+    cluster = c(
+    `0` = "gold", #CD4
+            `1` = "orangered", #Treg
+            `3` = "deeppink2", #naive_CD8
+            `4` = "darkorchid4", #mem_CD8
+            `5` = "chocolate1", #naive_CD4
+            # B cells
+            `2` = "peachpuff4", #naive_memB 1+2 (1)
+            `8` = "peru", #naive_memB 1+2 (2)
+            # NKT
+            `6` = "limegreen", #NKT_DC
+            `7` = "forestgreen", #NKT_B & NKT_DC
+            # other
+            `9` = "darkturquoise", #basophil
+            `10` = "navyblue"
+    )
+```
+
+```{r}
+for (i in markers) {
+  VlnPlot(df, features = i, group.by = "integrated_snn_res.0.4", cols = cluster) + RotatedAxis()
+  ggsave(filename = paste0(outdir, i, "_VlnPlot_alldata.pdf"))
+  
+  VlnPlot(blood_sham, features = i, cols = cluster) + RotatedAxis() + NoLegend()
+  ggsave(filename = paste0(outdir, i, "_VlnPlot_", "blood_sham", ".pdf"), width = 4, height = 4)
+  
+  VlnPlot(blood_veh, features = i, cols = cluster) + RotatedAxis() + NoLegend()
+  ggsave(filename = paste0(outdir,i,  "_VlnPlot_", "blood_veh", ".pdf"))
+  
+  VlnPlot(blood_ivig, features = i, cols = cluster) + RotatedAxis() + NoLegend()
+  ggsave(filename = paste0(outdir, i, "_VlnPlot_", "blood_ivig", ".pdf"))
+  
+  VlnPlot(blood_naive, features = i, cols = cluster) + RotatedAxis() + NoLegend()
+  ggsave(filename = paste0(outdir, i, "_VlnPlot_", "blood_naive", ".pdf"))
+  
+  VlnPlot(cord_veh, features = i, cols = cluster) + RotatedAxis() + NoLegend()
+  ggsave(filename = paste0(outdir, i, "_VlnPlot_", "cord_veh", ".pdf"))
+  
+  VlnPlot(cord_ivig, features = i, cols = cluster) + RotatedAxis() + NoLegend()
+  ggsave(filename = paste0(outdir, i, "_VlnPlot_", "cord_ivig", ".pdf")) 
+}
+```

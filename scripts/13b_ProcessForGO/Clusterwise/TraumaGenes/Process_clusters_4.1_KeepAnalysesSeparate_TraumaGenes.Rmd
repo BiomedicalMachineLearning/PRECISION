@@ -1,0 +1,56 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# just edit for each file and run
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Clusterwise/TraumaGenes/outdir/"
+markers <- read.delim("/scripts/13b_ProcessForGO/Clusterwise/outdir/4.1_SCIvsshamnaive_blood_Markers_KeepSeparate_dropRbMt.txt", row.names = 1)
+
+indir <- "/scripts/13_DEG/EachCelltypeSeparately/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/"
+sampleID <- "4.1_SCIvsshamnaive_blood"
+```
+
+```{r}
+# make a column with clusterID and direction together, will use this to loop
+markers <- mutate(markers, cluster_dir = paste0(clusterID, "_", direction))
+totest <- unique(markers$cluster_dir)
+```
+
+For trauma genes I want ones that are in sciVnaive and shamVnaive but not sciVsham
+
+```{r}
+prep_files <- function(myTotest) {
+  markers_sub <- markers %>% filter(cluster_dir == myTotest)
+  # get the DEGs
+  DEGs_sciVsham <- markers_sub %>% filter(analysisID == "SCIvsham")
+  DEGs_sciVnaive <- markers_sub %>% filter(analysisID == "SCIvnaive")
+  DEGs_shamVnaive <- markers_sub %>% filter(analysisID == "shamVnaive")
+  
+  #traumagenes <- setdiff((intersect(DEGs_sciVnaive$gene, DEGs_shamVnaive$gene)), DEGs_sciVsham$gene) #this fails if one of them is negative
+  compare1 <- intersect(DEGs_sciVnaive$gene, DEGs_shamVnaive$gene)
+  compare2 <- DEGs_sciVsham$gene
+  traumagenes <- setdiff(compare1, compare2)
+  traumagenes <- as.data.frame(traumagenes)
+  colnames(traumagenes) <- "gene"
+  # this step fails if there's no intersect, so doing it as an if statement
+  if (nrow(traumagenes) > 0) {
+  traumagenes$cluster <- myTotest
+  return(traumagenes) 
+  }
+}
+```
+
+
+
+```{r}
+alltraumagenes <- lapply(totest, prep_files) %>% bind_rows()
+write.table(alltraumagenes, file = paste0(outdir, "Clusterwise_TraumaGenes.txt"), sep = "\t", quote = FALSE, col.names = NA)
+```
+

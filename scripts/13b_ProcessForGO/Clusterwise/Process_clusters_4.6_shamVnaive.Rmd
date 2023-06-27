@@ -1,0 +1,58 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# just edit for each file and run
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+outdir <- "/scripts/13b_ProcessForGO/Clusterwise/outdir/"
+indir <- "/scripts/13_DEG/EachCelltypeSeparately/4.1_SCIvsshamnaive_blood/outdir_SCIvsNot/"
+sampleID <- "4.1_SCIvsshamnaive_blood"
+```
+
+
+```{r}
+data_files <- list.files(indir, full.names = TRUE, recursive = TRUE, pattern = ".txt")
+
+# List of the markers
+all_markers_file <- data_files[grep("Rb", data_files, invert = TRUE)]
+all_markers_file <- all_markers_file[grep("top10", all_markers_file, invert = TRUE)]
+
+dropRb_markers_file <- data_files[grep("Rb", data_files)]
+dropRb_markers_file <- dropRb_markers_file[grep("markers", dropRb_markers_file)]
+dropRb_markers_file <- dropRb_markers_file[grep("top10", dropRb_markers_file, invert = TRUE)]
+```
+
+```{r}
+prep_files <- function(myfile) {
+  clusterID <- gsub("_.*", "", basename(myfile))
+  analysisID <- gsub(".*_markers_", "", basename(myfile)) %>% gsub(".txt", "", .) %>% gsub("_RemoveRbMt", "", .)
+  print(clusterID)
+  df_temp <- read.delim(myfile, row.names = 1)
+  if(nrow(df_temp) > 0) {
+    df_temp$analysisID <- analysisID
+    df_temp$clusterID <- clusterID
+    df_temp <- mutate(df_temp, cluster = paste0(analysisID, "_", clusterID, "_", direction))
+    df_temp <- mutate(df_temp, avg_log2FC_abs = abs(avg_log2FC))
+    df_temp <- df_temp %>% group_by(cluster) %>% arrange(desc(avg_log2FC_abs, by_group = cluster))
+    return(df_temp) 
+  }
+}
+```
+
+```{r}
+df_all <- lapply(all_markers_file, prep_files) %>% bind_rows()
+rownames(df_all) <- seq(1:length(rownames(df_all)))
+df_all <- mutate(df_all, analysis_cluster = paste0(cluster, "_", analysisID))
+write.table(df_all, file = paste0(outdir, sampleID, "_Markers_KeepSeparate.txt"), sep = "\t", quote =  FALSE, col.names = NA)
+
+df_dropRb <- lapply(dropRb_markers_file, prep_files) %>% bind_rows()
+rownames(df_dropRb) <- seq(1:length(rownames(df_dropRb)))
+df_dropRb <- mutate(df_dropRb, analysis_cluster = paste0(cluster, "_", analysisID))
+write.table(df_dropRb, file = paste0(outdir, sampleID, "_Markers_KeepSeparate_dropRbMt.txt"), sep = "\t", quote =  FALSE, col.names = NA)
+```
